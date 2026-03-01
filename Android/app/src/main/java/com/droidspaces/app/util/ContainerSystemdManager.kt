@@ -288,7 +288,7 @@ object ContainerSystemdManager {
             ServiceFilter.ENABLED -> services.filter { it.isEnabled && !it.isRunning && !it.isMasked } // Enabled but stopped
             ServiceFilter.DISABLED -> services.filter { !it.isEnabled && !it.isRunning && !it.isMasked && !it.isStatic } // Disabled and stopped
             ServiceFilter.MASKED -> services.filter { it.isMasked }
-        }
+        }.sortedWith(compareByDescending<ServiceInfo> { it.isRunning }.thenBy { it.name })
     }
 
     // Systemctl commands

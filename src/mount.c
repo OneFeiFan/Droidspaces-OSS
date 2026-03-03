@@ -49,7 +49,10 @@ static int find_available_mountpoint(const char *name, char *mount_path,
   /* Create base directory if it doesn't exist */
   mkdir(base_dir, 0755);
 
-  snprintf(mount_path, size, "%s/%s", base_dir, name);
+  char safe_name[256];
+  sanitize_container_name(name, safe_name, sizeof(safe_name));
+
+  snprintf(mount_path, size, "%s/%s", base_dir, safe_name);
 
   if (access(mount_path, F_OK) == 0) {
     if (is_mountpoint(mount_path)) {

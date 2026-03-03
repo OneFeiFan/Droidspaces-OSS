@@ -6,6 +6,9 @@
  */
 
 #include "droidspace.h"
+
+/* Forward declarations */
+static void add_unknown_line(struct ds_config *cfg, const char *line);
 #include <libgen.h>
 
 /* ---------------------------------------------------------------------------
@@ -129,6 +132,12 @@ int ds_config_add_bind(struct ds_config *cfg, const char *src,
 }
 
 void free_config_binds(struct ds_config *cfg) {
+  /* Also free unknown lines and env vars here for centralized cleanup */
+  free_config_unknown_lines(cfg);
+  free_config_env_vars(cfg);
+
+  if (!cfg->binds)
+    return;
   free(cfg->binds);
   cfg->binds = NULL;
   cfg->bind_count = 0;
@@ -150,6 +159,9 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
              strerror(errno));
     return -1;
   }
+
+  /* Clear existing unknown lines to avoid duplication on re-load */
+  free_config_unknown_lines(cfg);
 
   cfg->config_file_existed = 1;
 
@@ -219,6 +231,11 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
         continue;
       }
       safe_strncpy(cfg->env_file, val, sizeof(cfg->env_file));
+    } else if (strcmp(key, "uuid") == 0) {
+      safe_strncpy(cfg->uuid, val, sizeof(cfg->uuid));
+    } else {
+      /* Preservation: Capture unknown key-value pairs for Android metadata */
+      add_unknown_line(cfg, line);
     }
   }
 
@@ -226,91 +243,44 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
   return 0;
 }
 
-/* List of keys managed by the C backend. Any other keys are preserved. */
-static const char *KNOWN_KEYS[] = {"name",
-                                   "hostname",
-                                   "rootfs_path",
-                                   "pidfile",
-                                   "enable_ipv6",
-                                   "enable_android_storage",
-                                   "enable_hw_access",
-                                   "enable_termux_x11",
-                                   "selinux_permissive",
-                                   "volatile_mode",
-                                   "foreground",
-                                   "bind_mounts",
-                                   "dns_servers",
-                                   "env_file",
-                                   NULL};
+/* Internal helper to add a raw line to the unknown list */
+static void add_unknown_line(struct ds_config *cfg, const char *line) {
+  struct ds_config_line *node = malloc(sizeof(*node));
+  if (!node)
+    return;
+  safe_strncpy(node->line, line, sizeof(node->line));
+  node->next = NULL;
+  if (!cfg->unknown_head) {
+    cfg->unknown_head = cfg->unknown_tail = node;
+  } else {
+    cfg->unknown_tail->next = node;
+    cfg->unknown_tail = node;
+  }
+}
 
-/* Linked list to store unknown key-value pairs from existing config */
-struct config_line {
-  char line[2048];
-  struct config_line *next;
-};
+void free_config_unknown_lines(struct ds_config *cfg) {
+  struct ds_config_line *curr = cfg->unknown_head;
+  while (curr) {
+    struct ds_config_line *next = curr->next;
+    free(curr);
+    curr = next;
+  }
+  cfg->unknown_head = cfg->unknown_tail = NULL;
+}
 
 int ds_config_save(const char *config_path, struct ds_config *cfg) {
   char temp_path[PATH_MAX];
   snprintf(temp_path, sizeof(temp_path), "%s.tmp", config_path);
 
-  struct config_line *unknown_head = NULL;
-  struct config_line *unknown_tail = NULL;
-
-  /* Step 1: Collect unknown keys from existing file */
-  FILE *f_in = fopen(config_path, "re");
-  if (f_in) {
-    char line[2048];
-    while (fgets(line, sizeof(line), f_in)) {
-      char line_copy[2048];
-      safe_strncpy(line_copy, line, sizeof(line_copy));
-      char *trimmed = trim_whitespace(line_copy);
-
-      /* Always skip header or comments in preservation to use new ones */
-      if (trimmed[0] == '#' || trimmed[0] == '\0')
-        continue;
-
-      char *equals = strchr(trimmed, '=');
-      if (!equals)
-        continue;
-
-      *equals = '\0';
-      char *key = trim_whitespace(trimmed);
-
-      int is_known = 0;
-      for (int i = 0; KNOWN_KEYS[i]; i++) {
-        if (strcmp(key, KNOWN_KEYS[i]) == 0) {
-          is_known = 1;
-          break;
-        }
-      }
-
-      if (!is_known) {
-        struct config_line *node = malloc(sizeof(*node));
-        if (node) {
-          safe_strncpy(node->line, line, sizeof(node->line));
-          node->next = NULL;
-          if (!unknown_head) {
-            unknown_head = unknown_tail = node;
-          } else {
-            unknown_tail->next = node;
-            unknown_tail = node;
-          }
-        }
-      }
-    }
-    fclose(f_in);
-  }
+  /* Step 1: Skip Step 1 — we now use the in-memory preservation from
+   * ds_config_load. This ensures mirroring and internal backups preserve all
+   * metadata. */
 
   /* Step 2: Write all configurations to temporary file */
   FILE *f_out = fopen(temp_path, "we");
   if (!f_out) {
     ds_warn("Failed to create temporary config '%s': %s", temp_path,
             strerror(errno));
-    while (unknown_head) {
-      struct config_line *next = unknown_head->next;
-      free(unknown_head);
-      unknown_head = next;
-    }
     return -1;
   }
 
@@ -352,6 +322,8 @@ int ds_config_save(const char *config_path, struct ds_config *cfg) {
 
   if (cfg->env_file[0])
     fprintf(f_out, "env_file=%s\n", cfg->env_file);
+  if (cfg->uuid[0])
+    fprintf(f_out, "uuid=%s\n", cfg->uuid);
 
   if (cfg->dns_servers[0])
     fprintf(f_out, "dns_servers=%s\n", cfg->dns_servers);
@@ -365,15 +337,13 @@ int ds_config_save(const char *config_path, struct ds_config *cfg) {
     fprintf(f_out, "\n");
   }
 
-  /* Step 3: Append preserved keys (Android App Config) */
-  if (unknown_head) {
+  /* Step 3: Append preserved keys (Android App Config) from memory */
+  if (cfg->unknown_head) {
     fprintf(f_out, "\n# Android App Configuration\n");
-    struct config_line *node = unknown_head;
+    struct ds_config_line *node = cfg->unknown_head;
     while (node) {
       fprintf(f_out, "%s", node->line);
-      struct config_line *next = node->next;
-      free(node);
-      node = next;
+      node = node->next;
     }
   }
 
@@ -451,4 +421,37 @@ char *ds_config_auto_path(const char *rootfs_path) {
   }
 
   return final_path;
+}
+
+int ds_config_load_by_name(const char *name, struct ds_config *cfg) {
+  if (!name || name[0] == '\0')
+    return -1;
+
+  char safe_name[256];
+  sanitize_container_name(name, safe_name, sizeof(safe_name));
+
+  char config_path[PATH_MAX];
+  snprintf(config_path, sizeof(config_path),
+           "%s/Containers/%s/container.config", get_workspace_dir(), safe_name);
+
+  return ds_config_load(config_path, cfg);
+}
+
+int ds_config_save_by_name(const char *name, struct ds_config *cfg) {
+  if (!name || name[0] == '\0')
+    return -1;
+
+  char safe_name[256];
+  sanitize_container_name(name, safe_name, sizeof(safe_name));
+
+  char container_dir[PATH_MAX];
+  snprintf(container_dir, sizeof(container_dir), "%s/Containers/%s",
+           get_workspace_dir(), safe_name);
+  mkdir_p(container_dir, 0755);
+
+  char config_path[PATH_MAX];
+  snprintf(config_path, sizeof(config_path), "%.3800s/container.config",
+           container_dir);
+
+  return ds_config_save(config_path, cfg);
 }

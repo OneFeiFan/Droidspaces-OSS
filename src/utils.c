@@ -21,6 +21,15 @@ void safe_strncpy(char *dst, const char *src, size_t size) {
   dst[size - 1] = '\0';
 }
 
+/* Mirrors ContainerManager.sanitizeContainerName() in the Android app.
+ * Replaces spaces with dashes so directory names are consistent. */
+void sanitize_container_name(const char *name, char *out, size_t size) {
+  size_t i;
+  for (i = 0; i < size - 1 && name[i] != '\0'; i++)
+    out[i] = (name[i] == ' ') ? '-' : name[i];
+  out[i] = '\0';
+}
+
 int is_subpath(const char *parent, const char *child) {
   char real_parent[PATH_MAX], real_child[PATH_MAX];
 
@@ -753,5 +762,27 @@ int set_selinux_context(const char *path, const char *context) {
 #endif
   }
 
+  return 0;
+}
+
+int copy_file(const char *src, const char *dst) {
+  FILE *in = fopen(src, "re");
+  if (!in)
+    return -1;
+  FILE *out = fopen(dst, "we");
+  if (!out) {
+    fclose(in);
+    return -1;
+  }
+  char buf[4096];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+    if (fwrite(buf, 1, n, out) != n) {
+      fclose(in);
+      fclose(out);
+      return -1;
+    }
+  fclose(in);
+  fclose(out);
   return 0;
 }

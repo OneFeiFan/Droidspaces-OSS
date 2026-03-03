@@ -20,7 +20,9 @@
  * This prevents format-truncation warnings while ensuring paths never overflow.
  */
 static void get_lock_path(const char *name, char *buf, size_t size) {
-  snprintf(buf, size, "%.2048s/%.256s" DS_EXT_LOCK, get_pids_dir(), name);
+  char safe_name[256];
+  sanitize_container_name(name, safe_name, sizeof(safe_name));
+  snprintf(buf, size, "%.2048s/%.256s" DS_EXT_LOCK, get_pids_dir(), safe_name);
 }
 
 /* Create external command lock — ONLY called by CLI parent.
@@ -75,9 +77,40 @@ static void release_external_lock(const char *name) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Configuration & Metadata Recovery
+ * ---------------------------------------------------------------------------*/
+
+/**
+ * Enhanced config loader that performs a global /proc scan if host metadata
+ * is missing.
+ *
+ * returns: 0 on success (config loaded/restored), -1 on fatal failure.
+ */
+
+void write_plain_env_file(const char *src, const char *dst) {
+  FILE *in = fopen(src, "re");
+  if (!in)
+    return;
+  FILE *out = fopen(dst, "we");
+  if (!out) {
+    fclose(in);
+    return;
+  }
+  char line[2048];
+  while (fgets(line, sizeof(line), in)) {
+    char *p = line;
+    if (strncmp(p, "export ", 7) == 0)
+      p += 7;
+    fputs(p, out);
+  }
+  fclose(in);
+  fclose(out);
+}
+
 /* Check if external command lock exists — called by monitor (READ ONLY).
  * Returns: 1 if lock exists and holder is alive, 0 otherwise. */
-static int is_external_lock_active(const char *name) {
+int is_external_lock_active(const char *name) {
   char lock_path[PATH_MAX];
   get_lock_path(name, lock_path, sizeof(lock_path));
 
@@ -221,23 +254,6 @@ int is_valid_container_pid(pid_t pid) {
  * Introspection
  * ---------------------------------------------------------------------------*/
 
-int check_status(struct ds_config *cfg, pid_t *pid_out) {
-  if (auto_resolve_pidfile(cfg) < 0) {
-    ds_error("Could not resolve PID file. Use --name or --pidfile.");
-    return -1;
-  }
-
-  pid_t pid = 0;
-  if (is_container_running(cfg, &pid)) {
-    if (pid_out)
-      *pid_out = pid;
-    return 0;
-  }
-
-  ds_error("Container '%s' is not running or invalid.", cfg->container_name);
-  return -1;
-}
-
 /* ---------------------------------------------------------------------------
  * Start
  * ---------------------------------------------------------------------------*/
@@ -333,6 +349,15 @@ int start_rootfs(struct ds_config *cfg) {
 
   generate_uuid(cfg->uuid, sizeof(cfg->uuid));
 
+  /* Persist the new UUID to config immediately so disk always matches
+   * the running container. CLI overrides (e.g. -f) are already in cfg
+   * at this point since start_rootfs is called after argument parsing. */
+  if (cfg->config_file[0])
+    ds_config_save(cfg->config_file, cfg);
+
+  /* Mirror to workspace so 'start -n <name>' works later without --conf */
+  ds_config_save_by_name(cfg->container_name, cfg);
+
   /* Parse environment file while host paths are reachable (before pivot_root)
    */
   if (cfg->env_file[0] != '\0') {
@@ -347,17 +372,7 @@ int start_rootfs(struct ds_config *cfg) {
              cfg->container_name);
   }
 
-  /* Write UUID sync file for boot sequence
-   * Skip in volatile mode: rootfs.img is mounted RO, and UUID
-   * is already in cfg (survives fork). */
-  if (!cfg->volatile_mode) {
-    char uuid_sync[PATH_MAX];
-    snprintf(uuid_sync, sizeof(uuid_sync), "%.4070s/.droidspaces-uuid",
-             cfg->rootfs_path);
-    write_file(uuid_sync, cfg->uuid);
-  }
-
-  /* 2. Parent-side PTY allocation (LXC Model) */
+  /* 4. Parent-side PTY allocation (LXC Model) */
   /* CRITICAL: Before forking, verify /sbin/init exists in the rootfs */
   char init_path[PATH_MAX];
   char rootfs_norm[PATH_MAX];
@@ -411,7 +426,7 @@ int start_rootfs(struct ds_config *cfg) {
       break;
   }
 
-  /* 3. Resolve target PID file names early so monitor inherits them */
+  /* 5. Resolve target PID file names early so monitor inherits them */
   char global_pidfile[PATH_MAX];
   resolve_pidfile_from_name(cfg->container_name, global_pidfile,
                             sizeof(global_pidfile));
@@ -421,18 +436,18 @@ int start_rootfs(struct ds_config *cfg) {
     safe_strncpy(cfg->pidfile, global_pidfile, sizeof(cfg->pidfile));
   }
 
-  /* 4. Pipe for synchronization */
+  /* 6. Pipe for synchronization */
   int sync_pipe[2];
   if (pipe(sync_pipe) < 0)
     ds_die("pipe failed: %s", strerror(errno));
 
-  /* 5. Configure host-side networking (NAT, ip_forward, DNS) BEFORE fork.
+  /* 7. Configure host-side networking (NAT, ip_forward, DNS) BEFORE fork.
    * This eliminates the race condition where the child boots and reads
    * DNS before the parent has written it. */
   fix_networking_host(cfg);
   android_optimizations(1);
 
-  /* 4. Fork Monitor Process */
+  /* 8. Fork Monitor Process */
   pid_t monitor_pid = fork();
   if (monitor_pid < 0) {
     close(sync_pipe[0]);
@@ -675,8 +690,8 @@ int start_rootfs(struct ds_config *cfg) {
         cfg->container_pid = new_pid;
       }
 
-      /* Generate a fresh UUID for the new boot cycle */
-      generate_uuid(cfg->uuid, sizeof(cfg->uuid));
+      /* Re-write the same UUID to sync file for the next boot cycle.
+       * internal_boot reads this across the pivot_root boundary. */
       if (!cfg->volatile_mode && cfg->rootfs_path[0]) {
         char uuid_sync[PATH_MAX];
         snprintf(uuid_sync, sizeof(uuid_sync), "%.4060s/.droidspaces-uuid",
@@ -741,7 +756,7 @@ int start_rootfs(struct ds_config *cfg) {
   ds_log("Container started with PID %d (Monitor: %d)", cfg->container_pid,
          monitor_pid);
 
-  /* 5b. Android: Remount /data with suid for directory-based containers.
+  /* 9. Android: Remount /data with suid for directory-based containers.
    * This is required for sudo/su to work if the rootfs is on /data. */
   if (is_android() && !cfg->rootfs_img_path[0])
     android_remount_data_suid();
@@ -750,7 +765,7 @@ int start_rootfs(struct ds_config *cfg) {
   if (cfg->volatile_mode)
     ds_log("Entering volatile mode (OverlayFS)...");
 
-  /* 6. Save PID file */
+  /* 10. Save PID file */
   char pid_str[32];
   snprintf(pid_str, sizeof(pid_str), "%d", cfg->container_pid);
 
@@ -769,7 +784,7 @@ int start_rootfs(struct ds_config *cfg) {
   if (cfg->is_img_mount)
     save_mount_path(cfg->pidfile, cfg->img_mount_point);
 
-  /* 6. Foreground or background finish */
+  /* 11. Foreground or background finish */
   if (cfg->foreground) {
 
     if (lock_acquired) {
@@ -869,10 +884,11 @@ int stop_rootfs(struct ds_config *cfg, int skip_unmount) {
     return -1;
   }
 
-  pid_t pid;
-  if (check_status(cfg, &pid) < 0) {
+  pid_t pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0) {
+    ds_error("Container '%s' is not running or invalid.", cfg->container_name);
     release_external_lock(cfg->container_name);
-    return -1; /* Container not running — signal failure to caller */
+    return -1;
   }
 
   ds_log("Stopping container '%s' (PID %d)...", cfg->container_name, pid);
@@ -1022,13 +1038,18 @@ int enter_namespace(pid_t pid) {
  * ---------------------------------------------------------------------------*/
 
 int enter_rootfs(struct ds_config *cfg, const char *user) {
-  pid_t pid;
-  if (check_status(cfg, &pid) < 0)
+  pid_t pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0) {
+    ds_error("Container '%s' is not running or invalid.", cfg->container_name);
     return -1;
+  }
 
   /* Parse environment file while host paths are reachable */
   if (cfg->env_file[0] != '\0') {
+    int prev_silent = ds_log_silent;
+    ds_log_silent = 1;
     parse_env_file_to_config(cfg->env_file, cfg);
+    ds_log_silent = prev_silent;
   }
 
   ds_log("Entering container '%s' as %s...", cfg->container_name,
@@ -1170,15 +1191,20 @@ int enter_rootfs(struct ds_config *cfg, const char *user) {
 
 int run_in_rootfs(struct ds_config *cfg, int argc, char **argv) {
   (void)argc;
-  pid_t pid;
-  if (check_status(cfg, &pid) < 0)
+  pid_t pid = 0;
+  if (!is_container_running(cfg, &pid) || pid <= 0) {
+    ds_error("Container '%s' is not running or invalid.", cfg->container_name);
     return -1;
+  }
 
   /* Removed verbose status log to allow raw output stream */
 
   /* Parse environment file while host paths are reachable */
   if (cfg->env_file[0] != '\0') {
+    int prev_silent = ds_log_silent;
+    ds_log_silent = 1;
     parse_env_file_to_config(cfg->env_file, cfg);
+    ds_log_silent = prev_silent;
   }
 
   pid_t child = fork();

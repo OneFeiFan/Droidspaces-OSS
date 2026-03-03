@@ -156,6 +156,10 @@ void parse_env_file_to_config(const char *path, struct ds_config *cfg) {
     if (*p == '#' || *p == '\0')
       continue;
 
+    /* Strip optional 'export ' prefix (written by ds_env_save) */
+    if (strncmp(p, "export ", 7) == 0)
+      p += 7;
+
     /* Find the '=' separator */
     char *eq = strchr(p, '=');
     if (!eq) {

@@ -179,6 +179,11 @@ struct ds_env_var {
   char *value;
 };
 
+struct ds_config_line {
+  char line[2048];
+  struct ds_config_line *next;
+};
+
 /* Terminal/TTY info — one per allocated PTY */
 struct ds_tty_info {
   int master;          /* master fd (stays in parent/monitor) */
@@ -238,6 +243,10 @@ struct ds_config {
   struct ds_env_var *env_vars;
   int env_var_count;
   int env_var_capacity;
+
+  /* Unknown config lines (preserved from Android metadata) */
+  struct ds_config_line *unknown_head;
+  struct ds_config_line *unknown_tail;
 };
 
 /* ---------------------------------------------------------------------------
@@ -275,17 +284,23 @@ void print_ds_banner(void);
 int is_systemd_rootfs(const char *path);
 void check_kernel_recommendation(void);
 void write_monitor_debug_log(const char *name, const char *fmt, ...);
+int copy_file(const char *src, const char *dst);
+void sanitize_container_name(const char *name, char *out, size_t size);
 
 /* ---------------------------------------------------------------------------
  * config.c
  * ---------------------------------------------------------------------------*/
 
 int ds_config_load(const char *config_path, struct ds_config *cfg);
+int ds_config_load_by_name(const char *name, struct ds_config *cfg);
 int ds_config_save(const char *config_path, struct ds_config *cfg);
+int ds_config_save_by_name(const char *name, struct ds_config *cfg);
 int ds_config_validate(struct ds_config *cfg);
 int ds_config_add_bind(struct ds_config *cfg, const char *src,
                        const char *dest);
 void free_config_binds(struct ds_config *cfg);
+void free_config_env_vars(struct ds_config *cfg);
+void free_config_unknown_lines(struct ds_config *cfg);
 char *ds_config_auto_path(const char *rootfs_path);
 
 /* ---------------------------------------------------------------------------
@@ -386,11 +401,14 @@ int resolve_pidfile_from_name(const char *name, char *pidfile, size_t size);
 int auto_resolve_pidfile(struct ds_config *cfg);
 int is_container_running(struct ds_config *cfg, pid_t *pid_out);
 int is_container_init(pid_t pid);
+int ds_metadata_sync(pid_t pid);
 int count_running_containers(char *first_name, size_t size);
 pid_t find_container_init_pid(const char *uuid);
+pid_t find_container_by_name(const char *name);
 int sync_pidfile(const char *src_pidfile, const char *name);
 int show_containers(void);
 int scan_containers(void);
+void write_plain_env_file(const char *src, const char *dst);
 
 /* ---------------------------------------------------------------------------
  * boot.c
@@ -406,14 +424,12 @@ void load_etc_environment(void);
 void ds_env_boot_setup(struct ds_config *cfg);
 void ds_env_save(const char *path, struct ds_config *cfg);
 void parse_env_file_to_config(const char *path, struct ds_config *cfg);
-void free_config_env_vars(struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------
  * container.c
  * ---------------------------------------------------------------------------*/
 
 int is_valid_container_pid(pid_t pid);
-int check_status(struct ds_config *cfg, pid_t *pid_out);
 int start_rootfs(struct ds_config *cfg);
 int stop_rootfs(struct ds_config *cfg, int skip_unmount);
 int enter_namespace(pid_t pid);

@@ -25,7 +25,9 @@ import com.droidspaces.app.util.PreferencesManager
 import com.droidspaces.app.util.SystemInfoManager
 import com.droidspaces.app.ui.viewmodel.AppStateViewModel
 import com.droidspaces.app.ui.viewmodel.ContainerViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.platform.LocalContext
 import com.droidspaces.app.R
 
@@ -82,7 +84,6 @@ fun MainTabScreen(
     var hasTriggeredInitialLoad by rememberSaveable { mutableStateOf(false) }
 
     // Initial setup - only runs ONCE per app session (not on navigation back)
-    // The key is a combination that only changes on cold start or post-installation
     LaunchedEffect(skipInitialRefresh, hasTriggeredInitialLoad) {
         if (!hasTriggeredInitialLoad) {
             hasTriggeredInitialLoad = true
@@ -92,13 +93,12 @@ fun MainTabScreen(
                 appStateViewModel.resetForPostInstallation()
             }
 
-            // Always force check on initial boot to detect updates after app installation
-            // This ensures we check for new binaries even if cached status exists
+            // Always force check on initial boot
             appStateViewModel.checkBackendStatus(force = true)
 
-            // Fetch containers if backend is available
+            // Proactive recovery on first launch: Always run scan if backend available
             if (appStateViewModel.isBackendAvailable) {
-                containerViewModel.fetchContainerList()
+                containerViewModel.runScan()
             }
         }
     }
@@ -179,9 +179,9 @@ fun MainTabScreen(
 
     /**
      * Combined refresh function for pull-to-refresh.
-     * Refreshes both backend status and container list.
+     * Refreshes both backend status and container list with specialized logic per tab.
      */
-    suspend fun performRefresh() {
+    suspend fun performRefresh(tab: TabItem) {
         // Check root status first (in case user denied root access)
         appStateViewModel.checkRootStatus()
         // Then refresh backend status
@@ -189,7 +189,34 @@ fun MainTabScreen(
         // Force refresh droidspaces version to get latest after backend updates
         if (appStateViewModel.isBackendAvailable) {
             SystemInfoManager.refreshDroidspacesVersion(context)
-            containerViewModel.fetchContainerList()
+
+            when (tab) {
+                TabItem.Home, TabItem.Containers -> {
+                    // Home/Containers: Always run a full scan on refresh for maximum visibility
+                    containerViewModel.runScan()
+                }
+                TabItem.ControlPanel -> {
+                    // Control Panel: snappy refresh, but background recovery
+                    val rawList = withContext(Dispatchers.IO) {
+                        com.droidspaces.app.util.ContainerManager.listContainers()
+                    }
+                    val anyRunning = rawList.any { it.isRunning }
+
+                    if (!anyRunning) {
+                        // Metadata missing for running containers? attempt foreground recovery
+                        containerViewModel.runScan()
+                    } else {
+                        // Running containers found, update UI normally (snappy)
+                        withContext(Dispatchers.Main) {
+                            containerViewModel.updateState(rawList)
+                        }
+                        // Then scan in background silently to catch orphans
+                        scope.launch {
+                            containerViewModel.silentScan()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -254,7 +281,7 @@ fun MainTabScreen(
                         onNavigateToControlPanel = { selectedTab = TabItem.ControlPanel },
                         containerCount = containerCount,
                         runningCount = runningCount,
-                        onRefresh = { scope.launch { performRefresh() } }
+                        onRefresh = { scope.launch { performRefresh(TabItem.Home) } }
                     )
                 }
 
@@ -265,7 +292,7 @@ fun MainTabScreen(
                         onNavigateToInstallation = onNavigateToContainerInstallation,
                         onNavigateToEditContainer = onNavigateToEditContainer,
                         containerViewModel = containerViewModel,
-                        onRefresh = { scope.launch { performRefresh() } }
+                        onRefresh = { scope.launch { performRefresh(TabItem.Containers) } }
                     )
                 }
 
@@ -274,7 +301,7 @@ fun MainTabScreen(
                         isBackendAvailable = isBackendAvailable,
                         isRootAvailable = appStateViewModel.isRootAvailable,
                         containerViewModel = containerViewModel,
-                        onRefresh = { scope.launch { performRefresh() } },
+                        onRefresh = { scope.launch { performRefresh(TabItem.ControlPanel) } },
                         onNavigateToContainerDetails = onNavigateToContainerDetails
                     )
                 }

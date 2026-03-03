@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.droidspaces.app.util.ContainerInfo
 import com.droidspaces.app.util.ContainerManager
 import com.droidspaces.app.util.PreferencesManager
+import com.droidspaces.app.util.Constants
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -97,6 +98,74 @@ class ContainerViewModel(application: Application) : AndroidViewModel(applicatio
 
             } finally {
                 isRefreshing = false
+            }
+        }
+    }
+
+    /**
+     * Suspendable version of fetchContainerList for sequential logic (like scanning).
+     */
+    suspend fun refreshContainersSuspend(): List<ContainerInfo> {
+        val result = withContext(Dispatchers.IO) {
+            ContainerManager.listContainers()
+        }
+        updateState(result)
+        Log.i(TAG, "Suspend refresh completed: ${result.size} containers")
+        return result
+    }
+
+    /**
+     * Updates the internal state and cache. Main-thread safe.
+     */
+    fun updateState(result: List<ContainerInfo>) {
+        _containers = result
+        prefsManager.cachedContainerCount = result.size
+        prefsManager.cachedRunningCount = result.count { it.isRunning }
+    }
+
+    /**
+     * Runs the 'scan' command and updates the container list.
+     * Intended to be called manually during UI refresh flows.
+     */
+    suspend fun runScan() {
+        isRefreshing = true
+        try {
+            withContext(Dispatchers.IO) {
+                Log.i(TAG, "Executing manual scan...")
+                val command = "${Constants.getDroidspacesCommand()} scan"
+                com.topjohnwu.superuser.Shell.cmd(command).exec()
+
+                // Fetch new list after scan
+                val result = ContainerManager.listContainers()
+                withContext(Dispatchers.Main) {
+                    updateState(result)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Scan command failed", e)
+        } finally {
+            isRefreshing = false
+        }
+    }
+
+    /**
+     * Runs the 'scan' command silently in the background.
+     * Updates state if new containers are found, but doesn't show UI indicators.
+     */
+    suspend fun silentScan() {
+        withContext(Dispatchers.IO) {
+            try {
+                Log.i(TAG, "Executing silent background scan...")
+                val command = "${Constants.getDroidspacesCommand()} scan"
+                com.topjohnwu.superuser.Shell.cmd(command).exec()
+
+                // Fetch new list and update state
+                val result = ContainerManager.listContainers()
+                withContext(Dispatchers.Main) {
+                    updateState(result)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent scan failed", e)
             }
         }
     }

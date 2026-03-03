@@ -42,7 +42,6 @@ void print_usage(void) {
   printf("  -i, --rootfs-img=PATH     Path to rootfs image (.img)\n");
   printf("  -n, --name=NAME           Container name (auto-generated if "
          "omitted)\n");
-  printf("  -p, --pidfile=PATH        Path to pidfile\n");
   printf("  -h, --hostname=NAME       Set container hostname\n");
   printf(
       "  -d, --dns=SERVERS         Set custom DNS servers (comma separated)\n");
@@ -93,6 +92,62 @@ static int validate_kernel_version(void) {
   return 0;
 }
 
+static int auto_resolve_container_name(struct ds_config *cfg) {
+  if (cfg->container_name[0] != '\0')
+    return 0;
+
+  char first_name[256];
+  int count = count_running_containers(first_name, sizeof(first_name));
+
+  /* If 0 containers found, try a scan once if we aren't already silent
+   * (prevents infinite scan loops) */
+  if (count == 0 && !ds_log_silent) {
+    ds_log_silent = 1;
+    scan_containers();
+    ds_log_silent = 0;
+    count = count_running_containers(first_name, sizeof(first_name));
+  }
+
+  if (count == 1) {
+    safe_strncpy(cfg->container_name, first_name, sizeof(cfg->container_name));
+    ds_log("Auto-selected running container: " C_BOLD "%s" C_RESET,
+           cfg->container_name);
+    return 0;
+  }
+
+  if (count == 0) {
+    ds_error("No containers are currently running.");
+  } else {
+    ds_error("Multiple containers running. Please specify " C_BOLD
+             "--name" C_RESET ".");
+    show_containers();
+  }
+  return -1;
+}
+
+/**
+ * Unified helper to resolve name, auto-select if needed, and load config.
+ * Performs a recovery scan if the name is known but config is missing.
+ */
+static int resolve_and_load_config(struct ds_config *cfg) {
+  if (auto_resolve_container_name(cfg) < 0)
+    return -1;
+
+  if (ds_config_load_by_name(cfg->container_name, cfg) < 0) {
+    int prev_silent = ds_log_silent;
+    ds_log_silent = 1;
+    scan_containers();
+    ds_log_silent = prev_silent;
+
+    if (ds_config_load_by_name(cfg->container_name, cfg) < 0) {
+      ds_error("Container '%s' not found or metadata missing.",
+               cfg->container_name);
+      return -1;
+    }
+  }
+  return 0;
+}
+
 /* ---------------------------------------------------------------------------
  * Command Dispatch
  * ---------------------------------------------------------------------------*/
@@ -109,7 +164,6 @@ int main(int argc, char **argv) {
       {"rootfs", required_argument, 0, 'r'},
       {"rootfs-img", required_argument, 0, 'i'},
       {"name", required_argument, 0, 'n'},
-      {"pidfile", required_argument, 0, 'p'},
       {"hostname", required_argument, 0, 'h'},
       {"dns", required_argument, 0, 'd'},
       {"foreground", no_argument, 0, 'f'},
@@ -138,11 +192,14 @@ int main(int argc, char **argv) {
   const char *discovered_cmd = NULL;
   int temp_optind = optind;
   int opt;
-  while ((opt = getopt_long(argc, argv, "+r:i:n:p:h:d:fHXPvVB:C:E:",
-                            long_options, NULL)) != -1) {
+  /* 1. Identity Pass: Capture command, explicit config, and name. */
+  while ((opt = getopt_long(argc, argv, "+r:i:n:h:d:fHXPvVB:C:E:", long_options,
+                            NULL)) != -1) {
     if (opt == 'C') {
       safe_strncpy(cfg.config_file, optarg, sizeof(cfg.config_file));
       cfg.config_file_specified = 1;
+    } else if (opt == 'n') {
+      safe_strncpy(cfg.container_name, optarg, sizeof(cfg.container_name));
     }
   }
   if (optind < argc)
@@ -156,7 +213,7 @@ int main(int argc, char **argv) {
     /* Auto-detect config from CLI rootfs arguments (preview only) */
     char temp_r[PATH_MAX] = {0}, temp_i[PATH_MAX] = {0};
     int t_optind = optind;
-    while ((opt = getopt_long(argc, argv, "+r:i:n:p:h:d:fHXPvVB:C:E:",
+    while ((opt = getopt_long(argc, argv, "+r:i:n:h:d:fHXPvVB:C:E:",
                               long_options, NULL)) != -1) {
       if (opt == 'r')
         safe_strncpy(temp_r, optarg, sizeof(temp_r));
@@ -170,13 +227,17 @@ int main(int argc, char **argv) {
       safe_strncpy(cfg.config_file, auto_p, sizeof(cfg.config_file));
       ds_config_load(cfg.config_file, &cfg);
       free(auto_p);
+    } else if (cfg.container_name[0]) {
+      /* Final identity fallback: look for workspace config by name.
+       * This makes 'start -n <name>' work for known containers. */
+      ds_config_load_by_name(cfg.container_name, &cfg);
     }
   }
 
   /* Re-parse CLI to apply overrides on top of loaded configuration */
   int strict = (discovered_cmd && (strcmp(discovered_cmd, "run") == 0));
   const char *optstring =
-      strict ? "+r:i:n:p:h:d:fHXPvVB:C:E:" : "r:i:n:p:h:d:fHXPvVB:C:E:";
+      strict ? "+r:i:n:h:d:fHXPvVB:C:E:" : "r:i:n:h:d:fHXPvVB:C:E:";
 
   while ((opt = getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
     switch (opt) {
@@ -192,9 +253,6 @@ int main(int argc, char **argv) {
       break;
     case 'n':
       safe_strncpy(cfg.container_name, optarg, sizeof(cfg.container_name));
-      break;
-    case 'p':
-      safe_strncpy(cfg.pidfile, optarg, sizeof(cfg.pidfile));
       break;
     case 'h':
       safe_strncpy(cfg.hostname, optarg, sizeof(cfg.hostname));
@@ -282,6 +340,17 @@ int main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
+  }
+
+  /* If --conf was explicit but the file didn't exist, ensure we have
+   * SOME identifying information (rootfs or name) before proceeding.
+   * If we have identity, treat missing --conf as a target for future saves. */
+  if (cfg.config_file_specified && !cfg.config_file_existed &&
+      !cfg.rootfs_path[0] && !cfg.rootfs_img_path[0] &&
+      !cfg.container_name[0]) {
+    ds_error("Config file '%s' not found.", cfg.config_file);
+    ret = 1;
+    goto cleanup;
   }
 
   /* Prevent foreground mode in non-interactive environments (pipes, CI/CD) */
@@ -389,30 +458,32 @@ int main(int argc, char **argv) {
       if (cfg.hostname[0] == '\0' && cfg.container_name[0]) {
         safe_strncpy(cfg.hostname, cfg.container_name, sizeof(cfg.hostname));
       }
-      ds_config_save(cfg.config_file, &cfg);
     }
 
     ret = start_rootfs(&cfg);
     goto cleanup;
   }
 
-  /* Other lifestyle commands */
+  /* Other lifestyle commands (require name resolution/recovery) */
   if (strcmp(cmd, "stop") == 0) {
-    if (check_requirements() < 0) {
-      ret = 1;
-      goto cleanup;
-    }
     /* Support multi-stop via comma separated names in --name */
     if (strchr(cfg.container_name, ',')) {
-      char *name = strtok(cfg.container_name, ",");
-      while (name) {
+      char *name_ptr = strtok(cfg.container_name, ",");
+      while (name_ptr) {
         struct ds_config subcfg = cfg;
-        safe_strncpy(subcfg.container_name, name,
+        safe_strncpy(subcfg.container_name, name_ptr,
                      sizeof(subcfg.container_name));
-        stop_rootfs(&subcfg, 0);
-        name = strtok(NULL, ",");
+        if (resolve_and_load_config(&subcfg) == 0) {
+          stop_rootfs(&subcfg, 0);
+        }
+        name_ptr = strtok(NULL, ",");
       }
       ret = 0;
+      goto cleanup;
+    }
+
+    if (resolve_and_load_config(&cfg) < 0) {
+      ret = 1;
       goto cleanup;
     }
     ret = stop_rootfs(&cfg, 0);
@@ -420,7 +491,7 @@ int main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "restart") == 0) {
-    if (ds_config_validate(&cfg) < 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
       ret = 1;
       goto cleanup;
     }
@@ -446,7 +517,6 @@ int main(int argc, char **argv) {
       if (cfg.hostname[0] == '\0' && cfg.container_name[0]) {
         safe_strncpy(cfg.hostname, cfg.container_name, sizeof(cfg.hostname));
       }
-      ds_config_save(cfg.config_file, &cfg);
     }
 
     ret = restart_rootfs(&cfg);
@@ -454,6 +524,11 @@ int main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "status") == 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
+      ret = 1;
+      goto cleanup;
+    }
+
     if (is_container_running(&cfg, NULL)) {
       printf("Container '%s' is " C_GREEN "Running" C_RESET "\n",
              cfg.container_name);
@@ -467,10 +542,13 @@ int main(int argc, char **argv) {
     }
   }
 
-  /* Machine-readable PID query — safe, never triggers cleanup.
-   * Prints just the integer PID, or the literal string "NONE".
-   * App uses this instead of 'status' to avoid PID file deletion races. */
+  /* Machine-readable PID query — safe, never triggers cleanup. */
   if (strcmp(cmd, "pid") == 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
+      ret = 1;
+      goto cleanup;
+    }
+
     pid_t pid = 0;
     if (is_container_running(&cfg, &pid) && pid > 0) {
       printf("%d\n", (int)pid);
@@ -481,33 +559,38 @@ int main(int argc, char **argv) {
     ret = 1;
     goto cleanup;
   }
+
   if (strcmp(cmd, "info") == 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
+      ret = 1;
+      goto cleanup;
+    }
     ret = show_info(&cfg, 0);
     goto cleanup;
   }
 
   if (strcmp(cmd, "enter") == 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
+      ret = 1;
+      goto cleanup;
+    }
+
     if (validate_kernel_version() < 0) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements() < 0) {
-      ret = 1;
-      goto cleanup;
-    }
-    /* Optional: we could validate container exists here,
-     * but enter_rootfs already does it. */
     const char *user = (optind + 1 < argc) ? argv[optind + 1] : NULL;
     ret = enter_rootfs(&cfg, user);
     goto cleanup;
   }
 
   if (strcmp(cmd, "run") == 0) {
-    if (validate_kernel_version() < 0) {
+    if (resolve_and_load_config(&cfg) < 0) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements() < 0) {
+
+    if (validate_kernel_version() < 0) {
       ret = 1;
       goto cleanup;
     }

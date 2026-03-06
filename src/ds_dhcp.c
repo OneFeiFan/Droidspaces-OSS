@@ -3,7 +3,7 @@
  *
  * ds_dhcp.c — Embedded single-lease DHCP server for NAT containers.
  *
- * Runs as a detached thread inside the monitor process. Bound exclusively to
+ * Runs as a joinable thread inside the monitor process. Bound exclusively to
  * the container's veth_host interface via SO_BINDTODEVICE so it never
  * interferes with any DHCP server already running on the host.
  *
@@ -239,7 +239,7 @@ static int send_reply(int sock, const struct dhcp_pkt *pkt, int pkt_len) {
 }
 
 /* ---------------------------------------------------------------------------
- * Core server loop (runs as detached thread)
+ * Core server loop (runs as joinable thread)
  * ---------------------------------------------------------------------------*/
 
 static void *dhcp_server_loop(void *arg) {
@@ -425,17 +425,16 @@ void ds_dhcp_server_start(struct ds_config *cfg, const char *veth_host,
 
   g_dhcp.sock = sock;
 
-  /* ── Spawn detached thread ─────────────────────────────────────────── */
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
-  if (pthread_create(&g_dhcp.tid, &attr, dhcp_server_loop, &g_dhcp) != 0) {
+  /* ── Spawn joinable thread ─────────────────────────────────────────── */
+  /* Joinable (default) so ds_dhcp_server_stop() can pthread_join() and
+   * guarantee the thread has fully exited before the next start() call
+   * calls memset(&g_dhcp, 0).  A detached thread could still be running
+   * when memset fires, corrupting its own context mid-loop. */
+  if (pthread_create(&g_dhcp.tid, NULL, dhcp_server_loop, &g_dhcp) != 0) {
     ds_warn("[DHCP] pthread_create: %s", strerror(errno));
     close(sock);
     g_dhcp.sock = -1;
   }
-  pthread_attr_destroy(&attr);
 
 unlock:
   pthread_mutex_unlock(&g_dhcp_lock);
@@ -444,6 +443,7 @@ unlock:
 void ds_dhcp_server_stop(void) {
   pthread_mutex_lock(&g_dhcp_lock);
   g_dhcp.stop = 1;
+  pthread_t tid = g_dhcp.tid;
   if (g_dhcp.sock >= 0) {
     /*
      * shutdown() unblocks the recv() call in dhcp_server_loop without
@@ -453,4 +453,12 @@ void ds_dhcp_server_stop(void) {
     shutdown(g_dhcp.sock, SHUT_RDWR);
   }
   pthread_mutex_unlock(&g_dhcp_lock);
+
+  /* Join outside the lock — guarantees the thread has fully exited and
+   * closed ctx->sock before ds_dhcp_server_start() calls memset(&g_dhcp).
+   * Without this, a reboot cycle races: start() overwrites g_dhcp.stop=0
+   * while the old thread is still spinning, causing two threads to serve
+   * DHCP simultaneously with a corrupted shared context. */
+  if (tid != 0)
+    pthread_join(tid, NULL);
 }

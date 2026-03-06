@@ -58,7 +58,7 @@
  * ---------------------------------------------------------------------------*/
 
 #define DS_PROJECT_NAME "Droidspaces"
-#define DS_VERSION "5.1.0"
+#define DS_VERSION "5.1.1"
 #define DS_MIN_KERNEL_MAJOR 3
 #define DS_MIN_KERNEL_MINOR 18
 #define DS_RECOMMENDED_KERNEL_MAJOR 4
@@ -106,7 +106,7 @@
 
 /* Hardening constants */
 #define DS_DEFAULT_TTY_GID 5
-#define DS_DEFAULT_SUBNET "10.0.0.0/16"
+#define DS_DEFAULT_SUBNET "172.28.0.0/16"
 #define DS_MAX_TRACKED_ENTRIES 512
 
 /* X11 Socket Paths (Host-side relative to /.old_root or absolute) */
@@ -169,7 +169,7 @@ typedef struct ds_nl_ctx ds_nl_ctx_t;
 /* Handshake payload: Monitor → init via net_done_pipe */
 struct ds_net_handshake {
   char peer_name[16]; /* e.g. "ds-p12345"        */
-  char ip_str[32];    /* e.g. "10.0.4.47/16"     */
+  char ip_str[32];    /* e.g. "172.28.4.47/16"  */
 };
 
 /* ── NAT networking constants ──────────────────────────────────────────────*/
@@ -178,7 +178,7 @@ struct ds_net_handshake {
 #define DS_NAT_BRIDGE "ds-br0"
 #endif
 #ifndef DS_NAT_GW_IP
-#define DS_NAT_GW_IP "10.0.0.1"
+#define DS_NAT_GW_IP "172.28.0.1"
 #endif
 #ifndef DS_NAT_PREFIX
 #define DS_NAT_PREFIX 16

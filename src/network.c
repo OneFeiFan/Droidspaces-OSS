@@ -39,20 +39,20 @@ static void veth_peer_name(pid_t pid, char *buf, size_t sz) {
 static void veth_peer_ip(pid_t pid, char *buf, size_t sz) {
   /* Multiplicative hash to spread sequential PIDs across the /16 subnet.
    *
-   * The /16 space gives us 256 third-octets (10.0.x.y) each with 254
+   * The /16 space gives us 256 third-octets (172.28.x.y) each with 254
    * usable host addresses, for 65534 total.
    *
    * octet3: 0–255, but we skip 0 (network row) → range 1–254 (254 rows)
    * octet4: 0–255, but we skip 0 (net) and 255 (bcast) → range 1–254
    *
-   * We also reserve 10.0.0.x entirely for gateway/infrastructure:
-   * octet3 starts at 1 so the first container gets 10.0.1.x, keeping
-   * 10.0.0.1 (DS_NAT_GW_IP) unambiguously the gateway in every row. */
+   * We also reserve 172.28.0.x entirely for gateway/infrastructure:
+   * octet3 starts at 1 so the first container gets 172.28.1.x, keeping
+   * 172.28.0.1 (DS_NAT_GW_IP) unambiguously the gateway in every row. */
   uint32_t hash = (uint32_t)pid;
   hash = ((hash >> 16) ^ hash) * 0x45d9f3b;
   int octet3 = (int)(((hash >> 8) % 254) + 1);
   int octet4 = (int)((hash % 254) + 1);
-  snprintf(buf, sz, "10.0.%d.%d/%d", octet3, octet4, DS_NAT_PREFIX);
+  snprintf(buf, sz, "172.28.%d.%d/%d", octet3, octet4, DS_NAT_PREFIX);
 }
 
 /* ---------------------------------------------------------------------------
@@ -202,7 +202,7 @@ int ds_net_disable_tx_checksum(const char *ifname) {
  * container init (via net_ready_pipe).
  *
  * Steps:
- *   1. Create or reuse bridge ds-br0 with IP 10.0.0.1/16
+ *   1. Create or reuse bridge ds-br0 with IP 172.28.0.1/16
  *   2. iptables: MASQUERADE + FORWARD ACCEPT + INPUT ACCEPT + MSS clamp
  *   3. Create veth pair (ds-vXXXXX / ds-pXXXXX)
  *   4. Disable TX checksum on host veth (Samsung/MTK workaround)

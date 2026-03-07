@@ -25,7 +25,7 @@ static pid_t read_current_container_pid(const char *pidfile) {
 }
 
 int console_monitor_loop(int master_fd, pid_t monitor_pid,
-                         const char *pidfile) {
+                         struct ds_config *cfg) {
   int epfd, sfd;
   sigset_t mask;
   struct signalfd_siginfo fdsi;
@@ -103,26 +103,28 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid,
           /* Check for CTRL+ALT+Q (\x1b\x11) escape sequence */
           if (n >= 2 && buf[0] == '\x1b' && buf[1] == '\x11') {
             static int exit_detected = 0;
-            /* Read current init PID from pidfile (handles reboot cycles) */
-            pid_t live_pid = read_current_container_pid(pidfile);
             if (exit_detected == 0) {
-              if (live_pid > 0) {
-                kill(live_pid, SIGPWR);
-                kill(live_pid, SIGTERM);
-                kill(live_pid, DS_SIG_STOP);
+              /* Droidspaces Specific: Graceful background shutdown.
+               * We fork a detached child to call stop_rootfs() silently.
+               * This allows the current console_monitor_loop to keep running,
+               * streaming the systemd/sysvinit shutdown logs to the user's
+               * terminal until the container naturally dies and the PTY hangs
+               * up.
+               */
+              pid_t bg_pid = fork();
+              if (bg_pid == 0) {
+                /* Background shutdown process */
+                setsid();
+                ds_log_silent = 1;
+                stop_rootfs(cfg, 0);
+                _exit(0);
+              } else if (bg_pid > 0) {
+                /* Parent console loop just marks exit and continues streaming
+                 */
+                exit_detected = 1;
               }
-              exit_detected = 1;
-              continue;
-            } else {
-              /* Force kill — send SIGKILL to container init.
-               * This cascades: init dies → intermediate exits →
-               * monitor cleans up → parent returns. */
-              ds_warn("Force exit requested. Killing container...");
-              if (live_pid > 0)
-                kill(live_pid, SIGKILL);
-              running = 0;
-              break;
             }
+            continue; /* Don't write the CTRL+ALT+Q sequence to the PTY */
           }
 
           if (write_all(master_fd, buf, (size_t)n) < 0) {
@@ -163,7 +165,7 @@ int console_monitor_loop(int master_fd, pid_t monitor_pid,
             ioctl(master_fd, TIOCSWINSZ, &ws);
         } else if (fdsi.ssi_signo == SIGINT || fdsi.ssi_signo == SIGTERM) {
           /* Forward to container init (read live PID) */
-          pid_t live_pid = read_current_container_pid(pidfile);
+          pid_t live_pid = read_current_container_pid(cfg->pidfile);
           if (live_pid > 0)
             kill(live_pid, (int)fdsi.ssi_signo);
         }

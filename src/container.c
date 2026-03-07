@@ -928,8 +928,7 @@ int start_rootfs(struct ds_config *cfg) {
       lock_acquired = 0;
     }
 
-    int ret =
-        console_monitor_loop(cfg->console.master, monitor_pid, cfg->pidfile);
+    int ret = console_monitor_loop(cfg->console.master, monitor_pid, cfg);
     free_config_env_vars(cfg);
     return ret;
   } else {

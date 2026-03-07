@@ -506,7 +506,7 @@ int ds_terminal_proxy(int master_fd);
  * ---------------------------------------------------------------------------*/
 
 int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
-                         const char *pidfile);
+                         struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------
  * pid.c

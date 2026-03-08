@@ -342,10 +342,25 @@ int setup_cgroups(int is_systemd) {
       strncat(host_full_subpath, self_path,
               sizeof(host_full_subpath) - strlen(host_full_subpath) - 1);
 
+      /* Some ROMs mount cgroup controllers at non-standard locations
+       * (e.g. blkio at /dev/blkio instead of /sys/fs/cgroup/blkio).
+       * If the resolved subpath doesn't exist, fall back to the hierarchy
+       * root so the bind-mount still succeeds. */
+      if (access(host_full_subpath, F_OK) != 0) {
+        ds_log("[DEBUG] cgroup subpath %s not found, falling back to %s",
+               host_full_subpath, hosts[i].mountpoint);
+        safe_strncpy(host_full_subpath, hosts[i].mountpoint,
+                     sizeof(host_full_subpath));
+      }
+
       unsigned long flags = MS_BIND | MS_REC | MS_NOSUID | MS_NODEV | MS_NOEXEC;
-      if (domount(host_full_subpath, container_mp, NULL, flags, NULL) == 0) {
+      if (domount_silent(host_full_subpath, container_mp, NULL, flags, NULL) ==
+          0) {
         if (is_systemd_hierarchy || hosts[i].version == 2)
           systemd_setup_done = 1;
+      } else {
+        ds_log("[DEBUG] cgroup bind-mount %s -> %s failed: %s",
+               host_full_subpath, container_mp, strerror(errno));
       }
     }
 

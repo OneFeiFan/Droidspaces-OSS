@@ -374,6 +374,8 @@ int android_seccomp_setup(int is_systemd);
 
 int domount(const char *src, const char *tgt, const char *fstype,
             unsigned long flags, const char *data);
+int domount_silent(const char *src, const char *tgt, const char *fstype,
+                   unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
 int setup_dev(const char *rootfs, int hw_access);
 int create_devices(const char *rootfs, int hw_access);

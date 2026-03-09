@@ -68,6 +68,9 @@ class ContainerInstallationViewModel : ViewModel() {
     var portForwards: List<PortForward> by mutableStateOf(emptyList())
         private set
 
+    var forceCgroupv1: Boolean by mutableStateOf(false)
+        private set
+
     fun setTarball(uri: Uri) {
         tarballUri = uri
     }
@@ -95,7 +98,8 @@ class ContainerInstallationViewModel : ViewModel() {
         runAtBoot: Boolean,
         envFileContent: String?,
         upstreamInterfaces: List<String>,
-        portForwards: List<PortForward>
+        portForwards: List<PortForward>,
+        forceCgroupv1: Boolean
     ) {
         this.netMode = netMode
         this.enableIPv6 = enableIPv6
@@ -110,6 +114,7 @@ class ContainerInstallationViewModel : ViewModel() {
         this.envFileContent = envFileContent
         this.upstreamInterfaces = upstreamInterfaces
         this.portForwards = portForwards
+        this.forceCgroupv1 = forceCgroupv1
     }
 
     fun buildConfig(): ContainerInfo? {
@@ -139,7 +144,8 @@ class ContainerInstallationViewModel : ViewModel() {
             useSparseImage = useSparseImage,
             sparseImageSizeGB = if (useSparseImage) sparseImageSizeGB else null,
             upstreamInterfaces = upstreamInterfaces,
-            portForwards = portForwards
+            portForwards = portForwards,
+            forceCgroupv1 = forceCgroupv1
         )
     }
 
@@ -162,6 +168,7 @@ class ContainerInstallationViewModel : ViewModel() {
         sparseImageSizeGB = 8
         upstreamInterfaces = emptyList()
         portForwards = emptyList()
+        forceCgroupv1 = false
     }
 }
 

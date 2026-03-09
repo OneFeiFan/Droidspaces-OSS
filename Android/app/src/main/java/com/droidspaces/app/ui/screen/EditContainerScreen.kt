@@ -80,6 +80,7 @@ fun EditContainerScreen(
     var envFileContent by remember { mutableStateOf(container.envFileContent ?: "") }
     var upstreamInterfaces by remember { mutableStateOf(container.upstreamInterfaces) }
     var portForwards by remember { mutableStateOf(container.portForwards) }
+    var forceCgroupv1 by remember { mutableStateOf(container.forceCgroupv1) }
 
     // Track the "saved" baseline values - updated after each successful save
     var savedHostname by remember { mutableStateOf(container.hostname) }
@@ -96,6 +97,7 @@ fun EditContainerScreen(
     var savedEnvFileContent by remember { mutableStateOf(container.envFileContent ?: "") }
     var savedUpstreamInterfaces by remember { mutableStateOf(container.upstreamInterfaces) }
     var savedPortForwards by remember { mutableStateOf(container.portForwards) }
+    var savedForceCgroupv1 by remember { mutableStateOf(container.forceCgroupv1) }
 
     // Navigation and internal UI states
     var showFilePicker by remember { mutableStateOf(false) }
@@ -128,7 +130,8 @@ fun EditContainerScreen(
             runAtBoot != savedRunAtBoot ||
             envFileContent != savedEnvFileContent ||
             upstreamInterfaces != savedUpstreamInterfaces ||
-            portForwards != savedPortForwards
+            portForwards != savedPortForwards ||
+            forceCgroupv1 != savedForceCgroupv1
         }
     }
 
@@ -161,7 +164,8 @@ fun EditContainerScreen(
                     runAtBoot = runAtBoot,
                     envFileContent = if (envFileContent.isBlank()) null else envFileContent,
                     upstreamInterfaces = upstreamInterfaces,
-                    portForwards = portForwards
+                    portForwards = portForwards,
+                    forceCgroupv1 = forceCgroupv1
                 )
 
                 // Update config file
@@ -186,6 +190,7 @@ fun EditContainerScreen(
                         savedEnvFileContent = envFileContent
                         savedUpstreamInterfaces = upstreamInterfaces
                         savedPortForwards = portForwards
+                        savedForceCgroupv1 = forceCgroupv1
 
                         // Refresh container list and SELinux status using ViewModel
                         containerViewModel.refresh()
@@ -925,6 +930,17 @@ fun EditContainerScreen(
                 onCheckedChange = {
                     clearFocus()
                     volatileMode = it
+                }
+            )
+
+            ToggleCard(
+                icon = Icons.Default.Cyclone,
+                title = context.getString(R.string.force_cgroupv1),
+                description = context.getString(R.string.force_cgroupv1_description),
+                checked = forceCgroupv1,
+                onCheckedChange = {
+                    clearFocus()
+                    forceCgroupv1 = it
                 }
             )
 

@@ -133,6 +133,7 @@
     <string name="selinux_option">SELinux</string>
     <string name="run_at_boot_option">Run at Boot</string>
     <string name="volatile_option">Volatile</string>
+    <string name="cgroupv1_option">Cgroup V1</string>
 
     <!-- Container Details Screen -->
     <string name="container_info">Container Info</string>
@@ -163,6 +164,8 @@
     <string name="selinux_permissive_description">Set SELinux permissive</string>
     <string name="run_at_boot">Run at Boot</string>
     <string name="run_at_boot_description">Start container on boot</string>
+    <string name="force_cgroupv1">Force Cgroup V1</string>
+    <string name="force_cgroupv1_description">Force use of legacy Cgroup V1 hierarchy</string>
     
     <!-- Config Categories and Network Mode -->
     <string name="cat_networking">Networking</string>

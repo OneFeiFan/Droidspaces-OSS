@@ -51,6 +51,7 @@ fun ContainerConfigScreen(
     initialBindMounts: List<BindMount> = emptyList(),
     initialDnsServers: String = "",
     initialRunAtBoot: Boolean = false,
+    initialForceCgroupv1: Boolean = false,
     initialEnvFileContent: String = "",
     initialUpstreamInterfaces: List<String> = emptyList(),
     initialPortForwards: List<PortForward> = emptyList(),
@@ -65,6 +66,7 @@ fun ContainerConfigScreen(
         bindMounts: List<BindMount>,
         dnsServers: String,
         runAtBoot: Boolean,
+        forceCgroupv1: Boolean,
         envFileContent: String?,
         upstreamInterfaces: List<String>,
         portForwards: List<PortForward>
@@ -81,6 +83,7 @@ fun ContainerConfigScreen(
     var bindMounts by remember { mutableStateOf(initialBindMounts) }
     var dnsServers by remember { mutableStateOf(initialDnsServers) }
     var runAtBoot by remember { mutableStateOf(initialRunAtBoot) }
+    var forceCgroupv1 by remember { mutableStateOf(initialForceCgroupv1) }
     var envFileContent by remember { mutableStateOf(initialEnvFileContent) }
     var upstreamInterfaces by remember { mutableStateOf(initialUpstreamInterfaces) }
     var portForwards by remember { mutableStateOf(initialPortForwards) }
@@ -174,7 +177,7 @@ fun ContainerConfigScreen(
             ) {
                 Button(
                     onClick = {
-                        onNext(netMode, enableIPv6, enableAndroidStorage, enableHwAccess, if (enableHwAccess) true else enableTermuxX11, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, if (envFileContent.isBlank()) null else envFileContent, upstreamInterfaces, portForwards)
+                        onNext(netMode, enableIPv6, enableAndroidStorage, enableHwAccess, if (enableHwAccess) true else enableTermuxX11, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, forceCgroupv1, if (envFileContent.isBlank()) null else envFileContent, upstreamInterfaces, portForwards)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -697,6 +700,14 @@ fun ContainerConfigScreen(
                 description = context.getString(R.string.volatile_mode_description),
                 checked = volatileMode,
                 onCheckedChange = { volatileMode = it }
+            )
+
+            ToggleCard(
+                icon = Icons.Default.Cyclone,
+                title = context.getString(R.string.force_cgroupv1),
+                description = context.getString(R.string.force_cgroupv1_description),
+                checked = forceCgroupv1,
+                onCheckedChange = { forceCgroupv1 = it }
             )
 
             ToggleCard(

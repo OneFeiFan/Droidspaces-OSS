@@ -989,6 +989,7 @@ int start_rootfs(struct ds_config *cfg) {
     /* Free dynamically allocated configuration members before exit */
     free_config_binds(cfg);
     free_config_env_vars(cfg);
+    free_config_unknown_lines(cfg);
     _exit(WIFEXITED(status) ? WEXITSTATUS(status) : 0);
   }
 
@@ -1074,6 +1075,7 @@ int start_rootfs(struct ds_config *cfg) {
        */
       free_config_binds(cfg);
       free_config_env_vars(cfg);
+      free_config_unknown_lines(cfg);
       goto cleanup;
     }
 
@@ -1094,6 +1096,7 @@ int start_rootfs(struct ds_config *cfg) {
     release_external_lock(cfg->container_name);
   free_config_binds(cfg);
   free_config_env_vars(cfg);
+  free_config_unknown_lines(cfg);
 
   return 0;
 
@@ -1122,6 +1125,7 @@ cleanup:
 
   free_config_binds(cfg);
   free_config_env_vars(cfg);
+  free_config_unknown_lines(cfg);
   return -1;
 }
 

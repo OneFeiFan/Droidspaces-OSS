@@ -126,8 +126,66 @@ int domount_silent(const char *src, const char *tgt, const char *fstype,
   return 0;
 }
 
-/* Helper to mask a path: uses bind-mount /dev/null for files,
- * and an empty tmpfs for directories to prevent "Not a directory" errors.
+/* ---------------------------------------------------------------------------
+ * Shared empty-dir masker
+ *
+ * Instead of mounting a fresh tmpfs per masked directory (N tmpfs entries in
+ * /proc/mounts), we mount ONE minimal tmpfs once and bind-mount it over every
+ * subsequent directory target.  Kernel memory is charged once; the mount table
+ * shows 1 tmpfs + N cheap bind entries instead of N independent tmpfs mounts.
+ *
+ * Falls back to per-dir tmpfs automatically if the shared mount fails (e.g.
+ * on kernels that reject O_PATH-based bind sources).
+ * ---------------------------------------------------------------------------*/
+typedef struct {
+  int fd;             /* O_PATH fd to the empty tmpfs root */
+  char proc_path[32]; /* "/proc/self/fd/<n>" - used as mount(2) source */
+  int ready;          /* 1 once initialised successfully */
+} ds_mask_dir_t;
+
+static ds_mask_dir_t g_mask_dir = {.fd = -1, .ready = 0};
+
+/* Call once before the first ds_mask_path() invocation. */
+static void ds_mask_dir_init(void) {
+  if (g_mask_dir.ready)
+    return;
+
+  /* /run is guaranteed to exist at this point (created in boot.c step 5).
+   * Mode 0000: the directory itself must be inaccessible. */
+  const char *backing = "/run/.ds-maskdir";
+  mkdir(backing, 0000);
+
+  /* nr_inodes=2  → only . and ..  (absolute minimum)
+   * size=0       → no data pages at all
+   * mode=000     → directory inaccessible even if somehow reached */
+  if (mount("none", backing, "tmpfs",
+            MS_RDONLY | MS_NOSUID | MS_NOEXEC | MS_NODEV,
+            "size=0,nr_inodes=2,mode=000") < 0) {
+    ds_warn("[SEC] mask-dir tmpfs failed (%s), using per-dir tmpfs fallback",
+            strerror(errno));
+    rmdir(backing);
+    return;
+  }
+
+  int fd = open(backing, O_PATH | O_DIRECTORY | O_CLOEXEC);
+  if (fd < 0) {
+    ds_warn("[SEC] mask-dir open failed: %s", strerror(errno));
+    umount2(backing, MNT_DETACH);
+    rmdir(backing);
+    return;
+  }
+
+  g_mask_dir.fd = fd;
+  snprintf(g_mask_dir.proc_path, sizeof(g_mask_dir.proc_path),
+           "/proc/self/fd/%d", fd);
+  g_mask_dir.ready = 1;
+  ds_log(
+      "[SEC] Shared mask-dir ready (fd %d) - directory masks use bind mounts.",
+      fd);
+}
+
+/* Helper to mask a path: bind-mounts /dev/null over files, and uses the
+ * shared empty dir (or a fresh tmpfs fallback) for directories.
  * Silently skips if the path doesn't exist. */
 static void ds_mask_path(const char *path) {
   struct stat st;
@@ -135,10 +193,18 @@ static void ds_mask_path(const char *path) {
     return;
 
   if (S_ISDIR(st.st_mode)) {
-    /* Mask directory with an empty, read-only tmpfs */
+    /* Prefer: bind from shared empty tmpfs (1 superblock, N bind entries) */
+    if (g_mask_dir.ready) {
+      if (mount(g_mask_dir.proc_path, path, NULL, MS_BIND | MS_RDONLY, NULL) ==
+          0)
+        return;
+      ds_warn("[SEC] shared bind failed for %s (%s), falling back to tmpfs",
+              path, strerror(errno));
+    }
+    /* Fallback: independent per-dir tmpfs */
     mount("none", path, "tmpfs", MS_RDONLY, NULL);
   } else {
-    /* Mask file with /dev/null */
+    /* File: bind /dev/null */
     mount("/dev/null", path, NULL, MS_BIND, NULL);
   }
 }
@@ -180,6 +246,9 @@ int bind_mount(const char *src, const char *tgt) {
  * "everything possible" requirement for low-level hardware tools.
  */
 int ds_apply_jail_mask(int hw_access) {
+  /* Initialize the shared mask-dir before anything uses it */
+  ds_mask_dir_init();
+
   /* Universal masks - dangerous for ANY container regardless of HW mode */
   const char *universal_masks[] = {"/proc/sysrq-trigger",
                                    "/proc/kcore",
@@ -190,36 +259,37 @@ int ds_apply_jail_mask(int hw_access) {
                                    NULL};
 
   /* Standard mode masks - restricted to protect host kernel surface */
-  const char *standard_masks[] = {
-      "/proc/keys",          "/proc/partitions",
-      "/proc/diskstats",     "/sys/devices/virtual/powercap",
-      "/sys/kernel/debug",   "/sys/kernel/security",
-      "/sys/kernel/tracing", "/sys/block",
-      "/sys/dev/block",      "/sys/class/block",
-      "/proc/mtk_mali",      "/proc/gpufreqv2",
-      "/proc/mmdvfs",        "/proc/mmqos",
-      "/proc/displowpower",  "/proc/mtkfb_debug",
-      "/proc/mtk_mdp_debug", "/proc/touch_boost",
-      "/proc/perfmgr",       "/proc/perfmgr_touch_boost",
-      "/proc/mtk_scheduler", NULL};
+  const char *standard_masks[] = {"/proc/keys",
+                                  "/proc/partitions",
+                                  "/proc/diskstats",
+                                  "/sys/devices/virtual/powercap",
+                                  "/sys/kernel/debug",
+                                  "/sys/kernel/tracing",
+                                  "/sys/block",
+                                  "/sys/dev/block",
+                                  "/sys/class/block",
+                                  "/proc/mtk_mali",
+                                  "/proc/gpufreqv2",
+                                  "/proc/mmdvfs",
+                                  "/proc/mmqos",
+                                  "/proc/displowpower",
+                                  "/proc/mtkfb_debug",
+                                  "/proc/mtk_mdp_debug",
+                                  "/proc/touch_boost",
+                                  "/proc/perfmgr",
+                                  "/proc/perfmgr_touch_boost",
+                                  "/proc/mtk_scheduler",
+                                  NULL};
 
-  /* Standard mode read-only remounts */
-  const char *standard_ro[] = {"/proc/bus",     "/proc/fs",   "/proc/irq",
-                               "/proc/asound",  "/proc/acpi", "/proc/scsi",
-                               "/sys/firmware", NULL};
-
-  /* Surgical sysctl protection - global settings that affect the host */
-  const char *standard_surgical_ro[] = {"/proc/sys/kernel/panic",
-                                        "/proc/sys/kernel/panic_on_oops",
-                                        "/proc/sys/kernel/core_pattern",
-                                        "/proc/sys/kernel/modprobe",
-                                        "/proc/sys/vm/panic_on_oom",
-                                        "/proc/sys/vm/max_map_count",
-                                        "/proc/sys/vm/overcommit_memory",
-                                        "/proc/sys/vm/overcommit_ratio",
-                                        "/proc/sys/vm/drop_caches",
-                                        "/proc/sys/vm/swappiness",
-                                        NULL};
+  /* Standard mode read-only remounts.
+   * /sys/kernel/security is intentionally here (not in masks): distro init
+   * scripts (runit, openrc, systemd) try to mount securityfs onto it and
+   * emit confusing errors if the path has been replaced with a tmpfs.
+   * A RO remount preserves the directory while blocking writes. */
+  const char *standard_ro[] = {
+      "/proc/bus",  "/proc/fs",   "/proc/irq",     "/proc/asound",
+      "/proc/acpi", "/proc/scsi", "/sys/firmware", "/sys/kernel/security",
+      NULL};
 
   /* Apply universal masks */
   for (int i = 0; universal_masks[i]; i++) {
@@ -260,15 +330,53 @@ int ds_apply_jail_mask(int hw_access) {
     }
   }
 
-  /* Universal Read-Only Mask: /proc/sys/kernel/sysrq
-   * We make it RO in ALL modes to prevent host sabotage. */
-  const char *sysrq_sysctl = "/proc/sys/kernel/sysrq";
-  if (access(sysrq_sysctl, F_OK) == 0) {
-    if (mount(sysrq_sysctl, sysrq_sysctl, NULL,
-              MS_BIND | MS_REMOUNT | MS_RDONLY, NULL) < 0) {
-      mount(sysrq_sysctl, sysrq_sysctl, NULL, MS_BIND | MS_REC, NULL);
-      mount(sysrq_sysctl, sysrq_sysctl, NULL, MS_BIND | MS_RDONLY | MS_REMOUNT,
-            NULL);
+  /*
+   * Wholesale /proc/sys lockdown - applied in BOTH standard and hardware mode.
+   *
+   * /proc/sys reflects the host kernel's sysctl state and is NOT scoped to the
+   * PID namespace. Even with a fresh procfs, a container running as root can
+   * write to /proc/sys/kernel/unprivileged_bpf_disabled, /proc/sys/fs/, etc.
+   * and corrupt Android host state (eBPF subsystem, dmesg, perf, hardlinks).
+   *
+   * Strategy: punch RW bind-mounts for the two genuinely namespace-scoped
+   * subtrees FIRST, then lock all of /proc/sys read-only in one shot.
+   * The pre-existing submounts shadow the parent remount.
+   *
+   * RW holes (namespace-scoped - safe for containers to write):
+   *   /proc/sys/net              - entirely net-namespace scoped
+   *   /proc/sys/kernel/hostname  - UTS-namespace scoped
+   *   /proc/sys/kernel/domainname - UTS-namespace scoped
+   *
+   * Everything else is blocked: kernel/, vm/, fs/, dev/, abi/, debug/.
+   * This covers all the dangerous sysctls in one mount entry instead of
+   * playing whack-a-mole with individual paths.
+   */
+  {
+    /* Step 1: Pin the namespace-scoped subtrees as independent mounts BEFORE
+     * the parent is locked.  A self-bind creates a new mount entry whose RW
+     * status is not inherited from the parent remount below. */
+    const char *rw_holes[] = {"/proc/sys/net", "/proc/sys/kernel/hostname",
+                              "/proc/sys/kernel/domainname", NULL};
+    for (int i = 0; rw_holes[i]; i++) {
+      if (access(rw_holes[i], F_OK) != 0)
+        continue;
+      if (mount(rw_holes[i], rw_holes[i], NULL, MS_BIND | MS_REC, NULL) < 0) {
+        ds_warn("[SEC] Failed to pin RW hole %s: %s", rw_holes[i],
+                strerror(errno));
+      }
+    }
+
+    /* Step 2: Lock all of /proc/sys in one remount. */
+    if (access("/proc/sys", F_OK) == 0) {
+      if (mount("/proc/sys", "/proc/sys", NULL,
+                MS_BIND | MS_REMOUNT | MS_RDONLY, NULL) < 0) {
+        /* Kernel < 3.5 fallback: bind first, then remount RO */
+        mount("/proc/sys", "/proc/sys", NULL, MS_BIND | MS_REC, NULL);
+        mount("/proc/sys", "/proc/sys", NULL, MS_BIND | MS_REMOUNT | MS_RDONLY,
+              NULL);
+      }
+      ds_log("[SEC] /proc/sys locked RO (net/hostname/domainname holes "
+             "preserved).");
     }
   }
 
@@ -289,18 +397,7 @@ int ds_apply_jail_mask(int hw_access) {
                 MS_BIND | MS_REMOUNT | MS_RDONLY, NULL) < 0) {
         mount(standard_ro[i], standard_ro[i], NULL, MS_BIND | MS_REC, NULL);
         mount(standard_ro[i], standard_ro[i], NULL,
-              MS_BIND | MS_RDONLY | MS_REMOUNT, NULL);
-      }
-    }
-  }
-
-  /* Apply surgical read-only protection for global sysctls */
-  for (int i = 0; standard_surgical_ro[i]; i++) {
-    const char *path = standard_surgical_ro[i];
-    if (access(path, F_OK) == 0) {
-      if (mount(path, path, NULL, MS_BIND | MS_REMOUNT | MS_RDONLY, NULL) < 0) {
-        mount(path, path, NULL, MS_BIND | MS_REC, NULL);
-        mount(path, path, NULL, MS_BIND | MS_RDONLY | MS_REMOUNT, NULL);
+              MS_BIND | MS_REMOUNT | MS_RDONLY, NULL);
       }
     }
   }

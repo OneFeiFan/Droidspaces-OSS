@@ -250,7 +250,8 @@ static int build_reply(struct dhcp_pkt *reply, const struct dhcp_pkt *req,
 
 static int send_reply(int sock, int ifindex, const struct dhcp_pkt *pkt,
                       int pkt_len, const ds_dhcp_ctx_t *ctx) {
-  uint8_t frame[2048];
+  uint8_t buffer[2048 + 2];
+  uint8_t *frame = buffer + 2;
   struct ethhdr *eth = (struct ethhdr *)frame;
   struct iphdr *ip = (struct iphdr *)(frame + sizeof(struct ethhdr));
   struct udphdr *udp =
@@ -260,7 +261,7 @@ static int send_reply(int sock, int ifindex, const struct dhcp_pkt *pkt,
 
   int total_len = (int)(sizeof(struct ethhdr) + sizeof(struct iphdr) +
                         sizeof(struct udphdr) + pkt_len);
-  if (total_len > (int)sizeof(frame))
+  if ((size_t)total_len > sizeof(buffer) - 2)
     return -1;
 
   /* 1. Ethernet Header */

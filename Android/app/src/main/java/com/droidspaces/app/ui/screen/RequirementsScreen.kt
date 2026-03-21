@@ -253,7 +253,6 @@ CONFIG_CGROUP_PIDS=y
 CONFIG_MEMCG=y
 CONFIG_CGROUP_SCHED=y
 CONFIG_FAIR_GROUP_SCHED=y
-CONFIG_CFS_BANDWIDTH=y
 CONFIG_CGROUP_FREEZER=y
 CONFIG_CGROUP_NET_PRIO=y
 
@@ -269,7 +268,7 @@ CONFIG_FW_LOADER_USER_HELPER=y
 CONFIG_FW_LOADER_COMPRESS=y
 
 # Droidspaces Network Isolation Support - NAT/none modes
-# Network namespace isolation 
+# Network namespace isolation
 CONFIG_NET_NS=y
 
 # Virtual ethernet pairs
@@ -296,6 +295,10 @@ CONFIG_IP_NF_FILTER=y
 
 # NAT table
 CONFIG_NF_NAT=y
+
+# NF Tables
+CONFIG_NF_TABLES=y
+
 # kernels ≤ 5.0 (Kernel 4.4 / 4.9)
 CONFIG_NF_NAT_IPV4=y
 CONFIG_IP_NF_NAT=y

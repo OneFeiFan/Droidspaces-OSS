@@ -330,11 +330,14 @@ static void print_page(int page, const char *bin) {
     printf("  %s -r rootfs/ --net=nat --upstream=v4-rmnet_data* start\n", bin);
     printf("  %s -r rootfs/ --net=nat --upstream=wlan0 --port=22:22 start\n",
            bin);
-    printf("  %s -r rootfs/ --net=nat --upstream=wlan0 --nat-ip=172.28.5.10 start\n",
+    printf("  %s -r rootfs/ --net=nat --upstream=wlan0 --nat-ip=172.28.5.10 "
+           "start\n",
            bin);
-    printf("  # --nat-ip assigns a fixed container IP (persisted to config).\n");
+    printf(
+        "  # --nat-ip assigns a fixed container IP (persisted to config).\n");
     printf("  # Omit it and Droidspaces auto-assigns a stable IP from the\n");
-    printf("  # container name - same IP on every reboot, no manual config needed.\n");
+    printf("  # container name - same IP on every reboot, no manual config "
+           "needed.\n");
     printf("  (NAT creates an isolated namespace with internet access)\n\n");
 
     printf("%sForce Legacy Cgroup V1 Hierarchy:%s\n", bold, reset);
@@ -381,6 +384,7 @@ static void print_page(int page, const char *bin) {
            "--hw-access start\n",
            bin);
     printf("  %s --name=test status\n", bin);
+    printf("  %s --name=test uptime\n", bin);
     printf("  %s --name=test enter developer\n", bin);
     printf("  %s --name=test run systemctl status\n", bin);
     printf("  %s --name=test run journalctl -n 50\n", bin);
@@ -412,6 +416,12 @@ static void print_page(int page, const char *bin) {
     printf("  %s --name=app --rootfs-img=/path/to/app.img start\n", bin);
     printf("  %s show\n", bin);
     printf("  %s stop --name=web,db,app\n\n", bin);
+
+    printf("%sChecking individual container uptime:%s\n", bold, reset);
+    printf("  %s --name=mycontainer uptime\n", bin);
+    printf("  (Shows how long the container has been running, independent\n");
+    printf("   of the device's global uptime - reads from /proc/1/stat\n");
+    printf("   inside the container's namespace via the host-side path)\n\n");
 
     printf("%sError recovery and troubleshooting:%s\n", bold, reset);
     printf("  %s --name=broken status\n", bin);

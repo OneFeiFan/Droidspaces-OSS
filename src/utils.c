@@ -1015,3 +1015,87 @@ int copy_file(const char *src, const char *dst) {
   fclose(out);
   return 0;
 }
+
+/* ---------------------------------------------------------------------------
+ * show_container_uptime
+ *
+ * Reads the container's PID 1 start time from the host-side path
+ * /proc/<container_pid>/root/proc/1/stat (field 22, starttime in clock
+ * ticks since host boot), subtracts it from /proc/uptime, and prints
+ * a human-readable uptime string.
+ *
+ * Works entirely from the host side — no namespace entry required.
+ * If the container is not running, behaves like enter_rootfs and
+ * run_in_rootfs: prints an error and returns -1.
+ * ---------------------------------------------------------------------------*/
+int show_container_uptime(struct ds_config *cfg) {
+  pid_t pid = 0;
+
+  if (!is_container_running(cfg, &pid) || pid <= 0) {
+    ds_error("Container '%s' is not running.", cfg->container_name);
+    return -1;
+  }
+
+  /* Build host-side path to the container's /proc/1/stat */
+  char stat_path[PATH_MAX];
+  if (build_proc_root_path(pid, "/proc/1/stat", stat_path, sizeof(stat_path)) <
+      0) {
+    ds_error("Failed to build stat path for container PID %d", (int)pid);
+    return -1;
+  }
+
+  FILE *f = fopen(stat_path, "r");
+  if (!f) {
+    ds_error("Failed to open %s: %s", stat_path, strerror(errno));
+    return -1;
+  }
+
+  unsigned long long start_ticks = 0;
+  /* Skip the first 21 fields — field 22 is starttime in clock ticks
+   * since host boot. */
+  for (int i = 1; i <= 21; i++) {
+    if (fscanf(f, "%*s") == EOF)
+      break;
+  }
+  if (fscanf(f, "%llu", &start_ticks) != 1)
+    start_ticks = 0;
+  fclose(f);
+
+  if (start_ticks == 0) {
+    ds_error("Failed to read start time from %s", stat_path);
+    return -1;
+  }
+
+  /* Read host uptime in seconds */
+  f = fopen("/proc/uptime", "r");
+  if (!f) {
+    ds_error("Failed to open /proc/uptime: %s", strerror(errno));
+    return -1;
+  }
+  double host_uptime_sec = 0.0;
+  if (fscanf(f, "%lf", &host_uptime_sec) != 1)
+    host_uptime_sec = 0.0;
+  fclose(f);
+
+  long ticks = sysconf(_SC_CLK_TCK);
+  if (ticks <= 0)
+    ticks = 100;
+
+  double start_sec = (double)start_ticks / (double)ticks;
+  long uptime = (long)(host_uptime_sec - start_sec);
+  if (uptime < 0)
+    uptime = 0;
+
+  int d = uptime / 86400;
+  int h = (uptime % 86400) / 3600;
+  int m = (uptime % 3600) / 60;
+  int s = uptime % 60;
+
+  /* Raw format for easy app parsing.
+   * Days only shown when hours >= 24. Always shows h m s. */
+  if (d > 0)
+    printf("%dd %dh %dm %ds\n", d, h, m, s);
+  else
+    printf("%dh %dm %ds\n", h, m, s);
+  return 0;
+}

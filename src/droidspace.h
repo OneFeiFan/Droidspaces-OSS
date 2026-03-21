@@ -655,6 +655,7 @@ int enter_namespace(pid_t pid, struct ds_config *cfg);
 int enter_rootfs(struct ds_config *cfg, const char *user);
 int run_in_rootfs(struct ds_config *cfg, int argc, char **argv);
 int show_info(struct ds_config *cfg, int trust_cfg_pid);
+int show_container_uptime(struct ds_config *cfg);
 int restart_rootfs(struct ds_config *cfg);
 
 /* ---------------------------------------------------------------------------

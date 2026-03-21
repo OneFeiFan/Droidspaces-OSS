@@ -30,6 +30,8 @@ void print_usage(void) {
   printf("  enter [user]              Enter a running container\n");
   printf("  run <cmd> [args]          Run a command in a running container\n");
   printf("  status                    Show container status\n");
+  printf("  uptime                    Show how long the container has been "
+         "running\n");
   printf("  info                      Show detailed container info\n");
   printf("  show                      List all running containers\n");
   printf("  scan                      Scan for untracked containers\n");
@@ -418,6 +420,7 @@ int main(int argc, char **argv) {
                           strcmp(discovered_cmd, "status") == 0 ||
                           strcmp(discovered_cmd, "pid") == 0 ||
                           strcmp(discovered_cmd, "info") == 0 ||
+                          strcmp(discovered_cmd, "uptime") == 0 ||
                           strcmp(discovered_cmd, "enter") == 0 ||
                           strcmp(discovered_cmd, "run") == 0));
 
@@ -860,6 +863,11 @@ int main(int argc, char **argv) {
 
   if (strcmp(cmd, "info") == 0) {
     ret = show_info(&cfg, 0);
+    goto cleanup;
+  }
+
+  if (strcmp(cmd, "uptime") == 0) {
+    ret = show_container_uptime(&cfg);
     goto cleanup;
   }
 

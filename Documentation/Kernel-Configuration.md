@@ -94,8 +94,7 @@ CONFIG_NETFILTER_ADVANCED=y
 
 # Connection tracking
 CONFIG_NF_CONNTRACK=y
-
-# kernels <= 4.18 (Android 4.4 / 4.9)
+# kernels ≤ 4.18 (Android 4.4 / 4.9)
 CONFIG_NF_CONNTRACK_IPV4=y
 
 # iptables infrastructure
@@ -110,7 +109,7 @@ CONFIG_NF_NAT=y
 # NF Tables
 CONFIG_NF_TABLES=y
 
-# kernels <= 5.0 (Kernel 4.4 / 4.9)
+# kernels ≤ 5.0 (Kernel 4.4 / 4.9)
 CONFIG_NF_NAT_IPV4=y
 CONFIG_IP_NF_NAT=y
 

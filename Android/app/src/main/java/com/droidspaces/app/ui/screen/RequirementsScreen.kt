@@ -240,7 +240,6 @@ CONFIG_NAMESPACES=y
 CONFIG_PID_NS=y
 CONFIG_UTS_NS=y
 CONFIG_IPC_NS=y
-CONFIG_USER_NS=y
 
 # Seccomp support (enables syscall filtering and security hardening)
 CONFIG_SECCOMP=y

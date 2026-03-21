@@ -35,8 +35,6 @@ The required configuration is the same for all kernel versions. The only differe
 <a id="kernel-config"></a>
 ## Required Kernel Configuration
 
-Save this block as `droidspaces.config` and place it in your kernel's architecture config folder (e.g., `arch/arm64/configs/`):
-
 ```makefile
 # Kernel configurations for full DroidSpaces support
 # Copyright (C) 2026 ravindu644 <droidcasts@protonmail.com>
@@ -144,8 +142,6 @@ CONFIG_ANDROID_PARANOID_NETWORK=n
 
 **Use NAT mode when running UFW or Fail2ban.** Running them in host mode will conflict with the host's networking stack.
 
-Save this block as `droidspaces-additional.config` and place it alongside `droidspaces.config`:
-
 ```makefile
 # UFW CORE
 CONFIG_NETFILTER_XT_MATCH_COMMENT=y
@@ -198,7 +194,7 @@ patch -p1 < /path/to/filename.patch
 
 ### Step 2: Place the Config Fragments
 
-Copy your saved config files into your kernel's architecture config directory:
+Save the [required kernel configuration](#kernel-config) block as `droidspaces.config` and place it in your kernel's architecture config folder (e.g., `arch/arm64/configs/`). If you want to use UFW or Fail2ban, also save the [additional kernel configuration](#additional-kernel-config) block as `droidspaces-additional.config` and place it in the same folder.
 
 ```bash
 # For ARM64 devices, place them alongside your device defconfig:
@@ -256,7 +252,7 @@ Rather than wiring up separate fragment files in the GKI build system, it is eas
 
 **Follow these rules carefully:**
 
-- **Do not** append `droidspaces.config` or `droidspaces-additional.config` to the end of `gki_defconfig` as a block.
+- **Do not** append the contents of [required kernel configuration](#kernel-config) or [additional kernel configuration](#additional-kernel-config) to the end of `gki_defconfig` as a block.
 - Search for each option from the required config list individually.
 - If an option appears as `# CONFIG_NAME is not set`, change it to `CONFIG_NAME=y`.
 - If an option is already set to `CONFIG_NAME=y`, leave it alone.

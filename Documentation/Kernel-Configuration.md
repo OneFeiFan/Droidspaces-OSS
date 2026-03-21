@@ -51,7 +51,6 @@ CONFIG_NAMESPACES=y
 CONFIG_PID_NS=y
 CONFIG_UTS_NS=y
 CONFIG_IPC_NS=y
-CONFIG_USER_NS=y
 
 # Seccomp support (enables syscall filtering and security hardening)
 CONFIG_SECCOMP=y
@@ -136,36 +135,6 @@ CONFIG_IP_MULTIPLE_TABLES=y
 # Disable this on older kernels to make internet work
 CONFIG_ANDROID_PARANOID_NETWORK=n
 ```
-
-### What Each Option Does
-
-| Config | Purpose |
-|--------|---------|
-| `CONFIG_SYSVIPC` | System V IPC. Required for shared memory and semaphores. |
-| `CONFIG_POSIX_MQUEUE` | POSIX message queues. Required by some IPC-dependent tools. |
-| `CONFIG_NAMESPACES` | Master switch for namespace support. Also enables mount namespaces. |
-| `CONFIG_PID_NS` | PID namespace. Gives each container its own process tree. |
-| `CONFIG_UTS_NS` | UTS namespace. Allows each container to have its own hostname. |
-| `CONFIG_IPC_NS` | IPC namespace. Depends on `SYSVIPC` and `POSIX_MQUEUE` - these must be enabled first or `IPC_NS` will not appear in `menuconfig`. |
-| `CONFIG_USER_NS` | User namespace. Required by some distributions even when not directly used. |
-| `CONFIG_SECCOMP` | Seccomp support. Enables the adaptive seccomp shield on legacy kernels. |
-| `CONFIG_SECCOMP_FILTER` | BPF-based seccomp filtering. Required for the seccomp shield. |
-| `CONFIG_CGROUPS` | Master switch for Control Groups. Required for systemd, resource management, and cgroup namespaces. |
-| `CONFIG_CGROUP_DEVICE` | Device access control via cgroups. |
-| `CONFIG_CGROUP_PIDS` | PID limiting via cgroups. Used by systemd for process tracking. |
-| `CONFIG_MEMCG` | Memory controller cgroup. Used by systemd for memory accounting. |
-| `CONFIG_DEVTMPFS` | Device filesystem. Required for `/dev` setup and hardware access mode. |
-| `CONFIG_OVERLAY_FS` | Overlay filesystem support. Required for volatile mode. |
-| `CONFIG_NET_NS` | Network namespace. Required for NAT and None networking modes. |
-| `CONFIG_VETH` | Virtual Ethernet pairs. Required for NAT mode to connect the host and container. |
-| `CONFIG_BRIDGE` | Bridge device support. Required for NAT mode networking. |
-| `CONFIG_IP_NF_IPTABLES` | IPTables infrastructure. Required for NAT and packet filtering. |
-| `CONFIG_NF_NAT` | Network Address Translation support. Required for NAT mode internet access. |
-| `CONFIG_NETFILTER_XT_TARGET_MASQUERADE` | Masquerade target. Required for NAT mode on Android. |
-| `CONFIG_NETFILTER_XT_TARGET_TCPMSS` | MSS clamping. Prevents MTU issues in NAT mode over mobile data and WiFi. |
-| `CONFIG_IP_ADVANCED_ROUTER` | Advanced routing. Required for isolated network namespace routing. |
-| `CONFIG_ANDROID_PARANOID_NETWORK=n` | Disables Android's paranoid network restrictions, which would otherwise block container networking. |
-
 ---
 
 <a id="additional-kernel-config"></a>

@@ -71,6 +71,13 @@ int is_subpath(const char *parent, const char *child) {
   return 0;
 }
 
+int is_running_in_termux(void) {
+  if (getenv("TERMUX_VERSION") || getenv("TERMUX_APP__PACKAGE_NAME") ||
+      getenv("TERMUX__PREFIX") || getenv("TERMUX_APP__APP_VERSION_CODE"))
+    return 1;
+  return 0;
+}
+
 int mkdir_p(const char *path, mode_t mode) {
   char tmp[PATH_MAX];
   char *p = NULL;

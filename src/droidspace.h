@@ -338,6 +338,7 @@ struct ds_config {
 
 void safe_strncpy(char *dst, const char *src, size_t size);
 int is_subpath(const char *parent, const char *child);
+int is_running_in_termux(void);
 int write_file(const char *path, const char *content);
 int read_file(const char *path, char *buf, size_t size);
 int write_file_atomic(const char *path, const char *content);

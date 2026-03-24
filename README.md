@@ -163,7 +163,7 @@ The entire runtime is a **single static binary** under 260KB, compiled against m
 | **Init System Support** | Run systemd, OpenRC or any other init system as PID 1. Full service management, journald logging, and proper boot/shutdown sequences. |
 | **Namespace Isolation** | Complete isolation via PID, MNT, UTS, IPC, and Cgroup namespaces. Each container has its own process tree, mount table, hostname, IPC resources, and cgroup hierarchy. |
 | **Network Isolation** | **3 Networking Modes (Host, NAT, None)**. Pure network isolation via `CLONE_NEWNET` (NAT/None modes) or shared host networking (Host mode). Works on both Android and Linux. |
-| **Port Forwarding** | Forward host ports to the container in NAT mode (e.g., `--port 22:22`). Supports TCP and UDP. |
+| **Port Forwarding** | Forward host ports to the container in NAT mode (e.g., `--port 22:22`). Supports TCP and UDP, as well as ranges like `1-500:1-500`. |
 | **Volatile Mode** | Ephemeral containers using OverlayFS. All changes are stored in RAM and discarded on exit. Perfect for testing and development. |
 | **Custom Bind Mounts** | Map host directories into containers at arbitrary mount points. Supports both chained (`-B a:b -B c:d`) and comma-separated (`-B a:b,c:d`) syntax. |
 | **Config File Support** | Load configurations directly from `.config` files using `--conf`. Integrates seamlessly with the CLI overrides (`--reset` is supported) and automatically syncs to the workspace for persistence. |
@@ -172,8 +172,7 @@ The entire runtime is a **single static binary** under 260KB, compiled against m
 | **In-container Reboot Support** | Handles in-container `reboot(2)` syscalls via a strict 3-level PID hierarchy to autonomously reinitialize the container sequence - TL;DR: you can restart the container remotely without touching Droidspaces! |
 | **Android Storage** | Bind-mount `/storage/emulated/0` into the container for direct access to the device's shared storage. |
 | **PTY/Console Support** | Full PTY isolation. Foreground mode provides an interactive console with proper terminal resize handling (binary only with the `-f` flag) |
-| **Multi-DNS Support** | Configure custom DNS servers (comma-separated) that bypass the host's default DNS lookup. |
-| **IPv6 Support** | Enable IPv6 networking in containers with a single flag. |
+| **Multi-DNS Support** | Configure custom DNS servers (comma-separated) to bypass the host's default DNS lookup. If you don't specify any DNS servers, it falls back to your ISP's default DNS. |
 | **SELinux Permissive Mode** | Optionally set SELinux to permissive mode during container boot if needed. |
 | **Rootfs Image Support** | Boot containers from ext4 `.img` files with automatic loop mounting, filesystem checks, and SELinux context hardening if needed. **The Android app also supports creating portable containers in rootfs.img mode** [ [How to create an ext4 rootfs.img manually ? ](./Documentation/Installation-Linux.md#option-b-create-an-ext4-image-recommended)] |
 | **Auto-Recovery** | Automatic stale PID file cleanup, container scanning for orphaned processes, and robust config resurrection via in-memory metadata syncing from `/run/droidspaces`. |
@@ -213,7 +212,7 @@ The entire runtime is a **single static binary** under 260KB, compiled against m
 | **Network Isolation** | **Broken on Android**. Even with all kernel configs enabled, network isolation with internet access never works. | **First-in-Class**. Perfectly handles network isolation with internet access on Android out of the box. |
 | Binary Size | 10MB+ (plus dependencies) | Under 260KB per architecture. |
 | Android Optimizations | None. Not designed for Android. | Yes. SELinux handling, FBE keyring management, storage integration, networking fixes |
-| Termux Required | Often. Used as the execution environment. | Never. Runs directly as a native binary. |
+| Termux Required | Often. Used as the execution environment. | Never. Runs directly as a native binary. Android app does have a built-in Terminal! |
 | Nested Containers | Complex setup required. | Supported natively on all kernels out of the box. |
 | Init System | LXC = yes, Docker = no. | Always. systemd/OpenRC as PID 1 by default. |
 
@@ -244,9 +243,9 @@ Your device must be rooted. The following rooting methods have been tested:
 
 | Root Method | Status | Notes |
 |-------------|--------|-------|
-| **KernelSU** | Fully Supported | Tested and stable. Recommended. |
-| **APatch** | Partially Supported | Init fails to start due to a seccomp block related to the `u:r:magisk:s0` SELinux domain. This happens only on some devices, while some users run Droidspaces with APatch successfully [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]. |
-| **Magisk** | Partially Supported | Same situation as APatch. Some users succeed, while others do not. [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]|
+| **KernelSU** | Fully Supported | Tested and stable. **Recommended**. Since Droidspaces requires a custom kernel anyway, we recommend adding KernelSU to your kernel. |
+| **APatch** | Partially Supported. Not Recommended | Init fails to start due to a seccomp block related to the `u:r:magisk:s0` SELinux domain. This happens only on some devices, while some users run Droidspaces with APatch successfully [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]. |
+| **Magisk** | Partially Supported. Not Recommended | Same situation as APatch. Some users succeed, while others do not. [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]|
 
 <a id="kernel-requirements"></a>
 

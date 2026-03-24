@@ -107,7 +107,7 @@ Tailscale provides a secure P2P tunnel to your container, allowing you to access
 
 ### Step 4: Secure the Container with UFW (Firewall)
 
-Android kernels often have limited IPv6 support. Since Droidspaces NAT mode currently only supports IPv4, we should disable IPv6 in UFW to avoid initialization errors.
+Since Droidspaces NAT mode currently only supports IPv4, we should disable IPv6 in UFW to avoid initialization errors.
 
 1. **Disable IPv6 in UFW**:
    ```bash

@@ -48,7 +48,8 @@ If you select **NAT (Isolated)** mode, you **must** specify one or more upstream
 > NAT mode is IPv4 only. If your carrier only provides IPv6, see the [IPv4 NAT Workaround](Troubleshooting.md#ipv4-quirks).
 
 ### Port Forwarding
-In NAT mode, use the **Port Forwarding** section to map host ports to container ports (e.g., `22:22`).
+In NAT mode, use the **Port Forwarding** section to map host ports to container ports (e.g., `22:22`). You can also specify **port ranges** (e.g., `1000-2000:1000-2000`) for services that require multiple contiguous ports.
+
 
 ---
 

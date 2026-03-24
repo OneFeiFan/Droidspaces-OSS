@@ -265,14 +265,23 @@ The container gets a private network namespace with only the loopback (`lo`) int
 - **Use Case**: Maximum security for offline tasks.
 
 ### Port Forwarding (NAT Mode)
-In NAT mode, you can expose container services to the host or local network using the `--port` flag:
+
+In NAT mode, you can expose container services to the host or local network using the `--port` flag. Supported formats:
+
 ```bash
 # Forward host port 8080 to container port 80
 --port 8080:80
 
-# Forward with explicit protocol
---port 2222:22/tcp --port 5000:5000/udp
+# Symmetric shorthand (host 8080 -> container 8080)
+--port 8080
+
+# Forward host range to container range (must be same size)
+--port 1000-2000:1000-2000
+
+# Mix and match with explicit protocols
+--port 2222:22/tcp --port 5000-5050:5000-5050/udp
 ```
+
 
 ### Upstream Interface Monitoring
 On Android, the connection often hops between Wi-Fi and Mobile Data. Droidspaces includes a **Route Monitor** that tracks your declared `--upstream` interfaces. If your active interface changes (e.g., you walk out of Wi-Fi range), the monitor automatically updates the kernel's policy routing to keep the container connected without a restart.

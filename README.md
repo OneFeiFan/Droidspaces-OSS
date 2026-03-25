@@ -247,7 +247,9 @@ Your device must be rooted. The following rooting methods have been tested:
 | **APatch** | Partially Supported. Not Recommended | Init fails to start due to a seccomp block related to the `u:r:magisk:s0` SELinux domain. This happens only on some devices, while some users run Droidspaces with APatch successfully [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]. |
 | **Magisk** | Partially Supported. Not Recommended | Same situation as APatch. Some users succeed, while others do not. [[more info](https://github.com/ravindu644/Droidspaces-OSS/issues/11#issuecomment-4036688816)]|
 
-<a id="kernel-requirements"></a>
+> [!CAUTION]
+>
+> **GrapheneOS is not supported** because it blocks critical syscalls used for namespace isolation and containerization, making it impossible to run a userspace runtime like Droidspaces even with root access.
 
 <a id="android-kernel-requirements"></a>
 

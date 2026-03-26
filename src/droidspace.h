@@ -60,7 +60,7 @@
  * ---------------------------------------------------------------------------*/
 
 #define DS_PROJECT_NAME "Droidspaces"
-#define DS_VERSION "5.8.1"
+#define DS_VERSION "5.8.2"
 #define DS_MIN_KERNEL_MAJOR 3
 #define DS_MIN_KERNEL_MINOR 18
 #define DS_RECOMMENDED_KERNEL_MAJOR 4
@@ -147,6 +147,7 @@ extern char ds_log_container_name[256];
 void ds_log_internal(const char *prefix, const char *color, int is_err,
                      const char *fmt, ...);
 void ds_die_internal(const char *fmt, ...);
+void rotate_log(const char *path, size_t max_size);
 int check_ns(int flag, const char *name);
 
 #define ds_log(fmt, ...) ds_log_internal("+", C_GREEN, 0, fmt, ##__VA_ARGS__)
@@ -340,6 +341,8 @@ struct ds_config {
  * ---------------------------------------------------------------------------*/
 
 void safe_strncpy(char *dst, const char *src, size_t size);
+char *ds_resolve_path_arg(const char *path);
+void ds_resolve_argv_paths(int argc, char **argv);
 int is_subpath(const char *parent, const char *child);
 int is_running_in_termux(void);
 int write_file(const char *path, const char *content);
@@ -618,6 +621,7 @@ int console_monitor_loop(int console_master_fd, pid_t monitor_pid,
 const char *get_workspace_dir(void);
 const char *get_pids_dir(void);
 const char *get_net_dir(void);
+const char *get_logs_dir(void);
 int ensure_workspace(void);
 int generate_container_name(const char *rootfs_path, char *name, size_t size);
 int find_available_name(const char *base_name, char *final_name, size_t size);
@@ -677,5 +681,13 @@ void print_documentation(const char *argv0);
 int is_dangerous_node(const char *name);
 int check_requirements(void);
 int check_requirements_detailed(void);
+
+/* ---------------------------------------------------------------------------
+ * daemon.c - daemon, client, and probe entry points
+ * ---------------------------------------------------------------------------*/
+
+int ds_daemon_run(int foreground);
+int ds_client_run(int argc, char **argv);
+int ds_daemon_probe(void);
 
 #endif /* DROIDSPACE_H */

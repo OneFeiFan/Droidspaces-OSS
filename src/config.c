@@ -9,7 +9,8 @@
 
 /* Forward declarations */
 static void add_unknown_line(struct ds_config *cfg, const char *line);
-/* ds_net_validate_static_ip is defined in network.c - declared in droidspace.h */
+/* ds_net_validate_static_ip is defined in network.c - declared in droidspace.h
+ */
 #include <libgen.h>
 
 /* ---------------------------------------------------------------------------
@@ -232,10 +233,12 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
       /* Validate on load - reject obviously malformed values stored by older
        * builds or hand-edited configs so we never boot with a garbage IP. */
       char _errbuf[128];
-      if (val[0] && ds_net_validate_static_ip(val, _errbuf, sizeof(_errbuf)) == 0)
+      if (val[0] &&
+          ds_net_validate_static_ip(val, _errbuf, sizeof(_errbuf)) == 0)
         safe_strncpy(cfg->static_nat_ip, val, sizeof(cfg->static_nat_ip));
       else if (val[0])
-        ds_warn("config: ignoring invalid static_nat_ip '%s': %s", val, _errbuf);
+        ds_warn("config: ignoring invalid static_nat_ip '%s': %s", val,
+                _errbuf);
     } else if (strcmp(key, "net_mode") == 0) {
       if (strcmp(val, "nat") == 0) {
         cfg->net_mode = DS_NET_NAT;
@@ -407,12 +410,12 @@ int ds_config_load(const char *config_path, struct ds_config *cfg) {
             }
 
             /* Host-side overlap */
-            uint16_t hs1 = pf->host_port,
-                     he1 = pf->host_port_end ? pf->host_port_end
-                                             : pf->host_port;
-            uint16_t hs2 = ex->host_port,
-                     he2 = ex->host_port_end ? ex->host_port_end
-                                             : ex->host_port;
+            uint16_t hs1 = pf->host_port, he1 = pf->host_port_end
+                                                    ? pf->host_port_end
+                                                    : pf->host_port;
+            uint16_t hs2 = ex->host_port, he2 = ex->host_port_end
+                                                    ? ex->host_port_end
+                                                    : ex->host_port;
             int host_overlap = (hs1 <= he2 && hs2 <= he1);
 
             /* Container-side overlap */

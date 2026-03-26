@@ -30,6 +30,207 @@ void sanitize_container_name(const char *name, char *out, size_t size) {
   out[i] = '\0';
 }
 
+/* ---------------------------------------------------------------------------
+ * Relative-path resolution
+ *
+ * The daemon calls chdir("/") inside daemonize(), so any relative path
+ * captured from the user's CWD must be made absolute BEFORE we reach the
+ * daemonize()/reexec() boundary.  ds_resolve_argv_paths() is called once
+ * in main() while CWD is still the user's directory.
+ *
+ * Strategy:
+ *   1. Try realpath(3) - handles .., symlinks, and canonicalises the path.
+ *      This works for paths that already exist on disk.
+ *   2. For paths that do not exist yet (e.g. a new rootfs image being
+ *      created), fall back to a plain cwd-join.  We still strip leading ./
+ *      sequences so the result is always absolute.
+ * ---------------------------------------------------------------------------*/
+
+char *ds_resolve_path_arg(const char *path) {
+  if (!path || !*path)
+    return strdup("");
+
+  const char *p = path;
+  char *to_free = NULL;
+
+  /* Handle ~/ expansion */
+  if (p[0] == '~' && (p[1] == '/' || p[1] == '\0')) {
+    const char *home = getenv("HOME");
+    if (home) {
+      size_t hlen = strlen(home);
+      size_t plen = strlen(p + 1);
+      to_free = malloc(hlen + plen + 1);
+      if (to_free) {
+        memcpy(to_free, home, hlen);
+        memcpy(to_free + hlen, p + 1, plen + 1);
+        p = to_free;
+      }
+    }
+  }
+
+  if (p[0] == '/') {
+    char *res = strdup(p);
+    free(to_free);
+    return res;
+  }
+
+  /* Fast path: realpath handles .., symlinks, and validates existence. */
+  char resolved[PATH_MAX];
+  if (realpath(p, resolved)) {
+    free(to_free);
+    return strdup(resolved);
+  }
+
+  /* Path does not exist yet - build an absolute path from the current CWD.
+   * Strip leading ./ noise before joining so the result stays clean. */
+  const char *suffix = p;
+  while (suffix[0] == '.' && suffix[1] == '/')
+    suffix += 2;
+  if (!*suffix) {
+    /* Input was pure "./" - resolve to CWD itself. */
+    char cwd[PATH_MAX];
+    char *res = strdup(getcwd(cwd, sizeof(cwd)) ? cwd : ".");
+    free(to_free);
+    return res;
+  }
+
+  char cwd[PATH_MAX];
+  if (!getcwd(cwd, sizeof(cwd))) {
+    char *res = strdup(p);
+    free(to_free);
+    return res;
+  }
+
+  size_t clen = strlen(cwd), plen = strlen(suffix);
+  if (clen + 1 + plen >= PATH_MAX) {
+    char *res = strdup(p);
+    free(to_free);
+    return res;
+  }
+
+  char *out = malloc(clen + 1 + plen + 1);
+  if (!out) {
+    char *res = strdup(p);
+    free(to_free);
+    return res;
+  }
+  memcpy(out, cwd, clen);
+  out[clen] = '/';
+  memcpy(out + clen + 1, suffix, plen + 1); /* copies the NUL terminator */
+  free(to_free);
+  return out;
+}
+
+/*
+ * Resolve every SRC component of a --bind-mount / -B value string.
+ * Format: SRC:DEST[,SRC:DEST,...]
+ * Only the SRC part of each pair is a host-side path; DEST lives inside the
+ * container namespace and is always absolute by convention.
+ */
+static char *resolve_bind_src(const char *val) {
+  /* Worst case: every token expands to PATH_MAX, times DS_MAX_BIND_MOUNTS.
+   * Use the heap - not the stack - to avoid blowing the stack in the daemon
+   * handler process (which may have a smaller stack than main). */
+  size_t bufsz = strlen(val) + PATH_MAX * 16 + 1;
+  char *copy = malloc(bufsz);
+  char *out = malloc(bufsz);
+  if (!copy || !out) {
+    free(copy);
+    free(out);
+    return strdup(val);
+  }
+  memcpy(copy, val, strlen(val) + 1);
+  out[0] = '\0';
+
+  char *sv, *tok = strtok_r(copy, ",", &sv);
+  int first = 1;
+  size_t off = 0;
+
+  while (tok) {
+    char *col = strchr(tok, ':');
+    const char *dest = col ? col + 1 : "";
+    if (col)
+      *col = '\0';
+
+    char *abs_src = ds_resolve_path_arg(tok);
+    const char *src = abs_src ? abs_src : tok;
+
+    int n = snprintf(out + off, bufsz - off, "%s%s%s%s", first ? "" : ",", src,
+                     col ? ":" : "", dest);
+    if (n > 0)
+      off += (size_t)n;
+    free(abs_src);
+    first = 0;
+    tok = strtok_r(NULL, ",", &sv);
+  }
+
+  free(copy);
+  char *result = strdup(out);
+  free(out);
+  return result;
+}
+
+/*
+ * Table of options whose next argument (or = suffix) is a filesystem path.
+ * Keeps ds_resolve_argv_paths() free of hard-coded option names.
+ */
+static const struct {
+  const char *opt;
+  int is_bind; /* 1 = --bind-mount: resolve the SRC component only */
+} ds_path_opts[] = {
+    {"--rootfs", 0}, {"-r", 0},           {"--rootfs-img", 0}, {"-i", 0},
+    {"--conf", 0},   {"--config", 0},     {"-C", 0},           {"--env", 0},
+    {"-E", 0},       {"--bind-mount", 1}, {"--bind", 1},       {"-B", 1},
+    {NULL, 0},
+};
+
+void ds_resolve_argv_paths(int argc, char **argv) {
+  for (int i = 0; i < argc; i++) {
+    const char *arg = argv[i];
+    if (!arg || arg[0] != '-') /* fast skip: non-option args are not paths */
+      continue;
+
+    for (int j = 0; ds_path_opts[j].opt; j++) {
+      const char *opt = ds_path_opts[j].opt;
+      int bind = ds_path_opts[j].is_bind;
+      size_t olen = strlen(opt);
+
+      /* "--opt=VALUE" form */
+      if (strncmp(arg, opt, olen) == 0 && arg[olen] == '=') {
+        const char *val = arg + olen + 1;
+        if (!*val || (val[0] == '/' && !bind))
+          break; /* absolute paths (non-bind) don't need resolution */
+        char *resolved =
+            bind ? resolve_bind_src(val) : ds_resolve_path_arg(val);
+        if (resolved) {
+          char *new_arg = malloc(olen + 1 + strlen(resolved) + 1);
+          if (new_arg) {
+            memcpy(new_arg, opt, olen);
+            new_arg[olen] = '=';
+            strcpy(new_arg + olen + 1, resolved);
+            argv[i] = new_arg; /* argv[i] was a kernel-provided pointer; safe to
+                                  replace */
+          }
+          free(resolved);
+        }
+        break;
+      }
+
+      /* "--opt VALUE" form (value is the next element) */
+      if (strcmp(arg, opt) == 0 && i + 1 < argc) {
+        const char *val = argv[i + 1];
+        if (!val || !*val || (val[0] == '/' && !bind))
+          continue;
+        char *resolved =
+            bind ? resolve_bind_src(val) : ds_resolve_path_arg(val);
+        if (resolved)
+          argv[i + 1] = resolved; /* kernel-provided string; safe to replace */
+        break;
+      }
+    }
+  }
+}
+
 int is_subpath(const char *parent, const char *child) {
   char real_parent[PATH_MAX], real_child[PATH_MAX];
 
@@ -770,6 +971,15 @@ void check_kernel_recommendation(void) {
   }
 }
 
+void rotate_log(const char *path, size_t max_size) {
+  struct stat st;
+  if (stat(path, &st) == 0 && (size_t)st.st_size >= max_size) {
+    char old_path[PATH_MAX + 8];
+    snprintf(old_path, sizeof(old_path), "%s.old", path);
+    rename(path, old_path);
+  }
+}
+
 static void write_to_log_file(const char *name, const char *component,
                               const char *raw_msg) {
   if (!name || !name[0])
@@ -785,13 +995,7 @@ static void write_to_log_file(const char *name, const char *component,
   char log_path[PATH_MAX];
   snprintf(log_path, sizeof(log_path), "%.4090s/log", log_dir);
 
-  /* Rotate log to log.old if it exceeds 2MB */
-  struct stat st;
-  if (stat(log_path, &st) == 0 && st.st_size >= 2 * 1024 * 1024) {
-    char old_log_path[PATH_MAX + 8];
-    snprintf(old_log_path, sizeof(old_log_path), "%s.old", log_path);
-    rename(log_path, old_log_path);
-  }
+  rotate_log(log_path, 2 * 1024 * 1024);
 
   FILE *f = fopen(log_path, "ae"); /* append + close-on-exec */
   if (!f)

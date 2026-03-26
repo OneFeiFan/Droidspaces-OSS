@@ -29,10 +29,18 @@ const char *get_net_dir(void) {
   return net_path;
 }
 
+const char *get_logs_dir(void) {
+  static char logs_path[PATH_MAX];
+  snprintf(logs_path, sizeof(logs_path), "%s/%s", get_workspace_dir(),
+           DS_LOGS_SUBDIR);
+  return logs_path;
+}
+
 int ensure_workspace(void) {
   mkdir(get_workspace_dir(), 0755);
   mkdir(get_pids_dir(), 0755);
   mkdir(get_net_dir(), 0755);
+  mkdir(get_logs_dir(), 0755);
 
   /* Also ensure /data/local/Droidspaces/mounts on Android */
   if (is_android()) {
@@ -484,15 +492,22 @@ int is_container_init(pid_t pid) {
   if (!f)
     return 0;
 
-  char line[256];
+  char line[1024];
   int is_init = 0;
   while (fgets(line, sizeof(line), f)) {
     if (strncmp(line, "NSpid:", 6) == 0) {
-      /* NSpid: 12345 1  (last value is 1 if it's init in its namespace) */
-      char *last_space = strrchr(line, ' ');
-      if (!last_space)
-        last_space = strrchr(line, '\t');
-      if (last_space && atoi(last_space + 1) == 1) {
+      /* NSpid line format: "NSpid: <pid1> <pid2> ... <pidN>"
+       * The last value is the PID in the innermost namespace.
+       * We use a robust tokenizer to avoid issues with tabs/spaces. */
+      char *p = line + 6;
+      char *last_val = NULL;
+      char *saveptr;
+      char *token = strtok_r(p, " \t\n\r", &saveptr);
+      while (token) {
+        last_val = token;
+        token = strtok_r(NULL, " \t\n\r", &saveptr);
+      }
+      if (last_val && strcmp(last_val, "1") == 0) {
         is_init = 1;
       }
       break;

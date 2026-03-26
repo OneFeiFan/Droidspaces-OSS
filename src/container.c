@@ -263,6 +263,7 @@ int is_valid_container_pid(pid_t pid) {
  * ---------------------------------------------------------------------------*/
 
 int start_rootfs(struct ds_config *cfg) {
+  int has_side_effects = 0;
   /* 0. Early restart detection: check for external lock from previous stop
    *    command to detect a preserved mount for reuse. */
   int lock_acquired = 0;
@@ -349,6 +350,8 @@ int start_rootfs(struct ds_config *cfg) {
   if (cfg->hostname[0] == '\0') {
     safe_strncpy(cfg->hostname, cfg->container_name, sizeof(cfg->hostname));
   }
+
+  has_side_effects = 1;
 
   /* 2. Mount rootfs image if provided (using the resolved name) */
   if (cfg->rootfs_img_path[0] && !lock_acquired) {
@@ -1111,8 +1114,10 @@ int start_rootfs(struct ds_config *cfg) {
 cleanup:
   /* Centralized host-side cleanup IF we are returning error.
    * This ensures image mounts and tracking files are reverted on fatal boot
-   * errors. */
-  cleanup_container_resources(cfg, cfg->container_pid, 0, 1 /* force */);
+   * errors. Only execute if we successfully crossed the point of creating effects. */
+  if (has_side_effects) {
+    cleanup_container_resources(cfg, cfg->container_pid, 0, 1 /* force */);
+  }
   if (lock_acquired)
     release_external_lock(cfg->container_name);
 

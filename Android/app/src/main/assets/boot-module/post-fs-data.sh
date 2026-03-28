@@ -28,6 +28,13 @@ log "Droidspaces post-fs-data script started"
 # Daemon mode marker file
 DAEMON_MODE_FILE=${DROIDSPACE_DIR}/.daemon_mode
 
+# Check if the /vendor partition already has droidspaces binary intergrated
+if [ -f /vendor/bin/droidspaces ] || [ -L /vendor/bin/droidspaces ]; then
+    log "Droidspaces binary already integrated in /vendor partition, skipping..."
+    echo "1" > "${DAEMON_MODE_FILE}"
+    exit 0
+fi
+
 # Live SELinux patching
 if [ -f "${MAGISKPOLICY_BINARY}" ] && [ -f "${DROIDSPACES_TE_FILE}" ]; then
     log "Patching SELinux policy..."

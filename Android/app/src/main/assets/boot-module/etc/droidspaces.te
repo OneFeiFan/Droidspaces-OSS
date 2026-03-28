@@ -17,5 +17,5 @@ allowxperm magisk unlabeled { dir file lnk_file sock_file fifo_file } ioctl *
 # allows kernel (kdevtmpfs) to create loop device nodes
 # also, allow kernel full access to rootfs image and vold data files
 allow kernel device blk_file { create setattr getattr unlink }
-allow kernel system_data_file file *
-allow kernel vold_data_file file *
+allow kernel system_data_file file { read write open getattr }
+allow kernel vold_data_file file { read write open getattr }

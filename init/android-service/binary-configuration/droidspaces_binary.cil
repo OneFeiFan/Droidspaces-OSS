@@ -20,6 +20,10 @@
 ; Allow the domain transition into droidspacesd
 (allow init droidspacesd (process (transition)))
 
+; Allow init to run droidspaces_autoboot script
+(allow init droidspacesd (process (noatsecure rlimitinh siginh)))
+(allow init droidspacesd_exec (file (execute getattr open read)))
+
 ; Allow kernel to create and manage loop device nodes.
 ; Fixes: rootfs.img mounting failures - the kernel needs to create /dev/loop* block
 ; devices dynamically before droidspacesd can attach the rootfs image to them

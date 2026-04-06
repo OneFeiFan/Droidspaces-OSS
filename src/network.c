@@ -883,33 +883,6 @@ int fix_networking_rootfs(struct ds_config *cfg) {
    * CAP_NET_RAW. */
   write_file("/proc/sys/net/ipv4/ping_group_range", "0 2147483647");
 
-  /* 6. Android Network Groups */
-  if (is_android()) {
-    const char *etc_group = "/etc/group";
-    if (access(etc_group, F_OK) == 0) {
-      if (!grep_file(etc_group, "aid_inet")) {
-        FILE *fg = fopen(etc_group, "ae");
-        if (fg) {
-          fprintf(
-              fg,
-              "aid_inet:x:3003:\naid_net_raw:x:3004:\naid_net_admin:x:3005:\n");
-          fclose(fg);
-        }
-      }
-    }
-
-    /* Add root to groups if usermod exists */
-    if (access("/usr/sbin/usermod", X_OK) == 0 ||
-        access("/sbin/usermod", X_OK) == 0) {
-      if (!grep_file("/etc/group", "aid_inet:x:3003:root") &&
-          !grep_file("/etc/group", "aid_inet:*:3003:root")) {
-        char *args[] = {"usermod", "-a", "-G", "aid_inet,aid_net_raw",
-                        "root",    NULL};
-        run_command_quiet(args);
-      }
-    }
-  }
-
   return 0;
 }
 

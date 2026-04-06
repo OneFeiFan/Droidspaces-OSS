@@ -16,9 +16,9 @@ int is_android(void) {
   if (cached_result != -1)
     return cached_result;
 
-  /* Check for Android-specific environments or devices */
+  /* Check for Android-specific environments or files */
   if (getenv("ANDROID_ROOT") || access("/system/bin/app_process", F_OK) == 0 ||
-      access("/dev/binder", F_OK) == 0 || access("/dev/ashmem", F_OK) == 0)
+      access("/system/build.prop", F_OK) == 0)
     cached_result = 1;
   else
     cached_result = 0;

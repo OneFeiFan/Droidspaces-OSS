@@ -3,6 +3,7 @@
 [![Telegram channel](https://img.shields.io/badge/Telegram-Channel-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Droidspaces)
 [![Android support](https://img.shields.io/badge/-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](#a-android-devices)
 [![Linux desktop](https://img.shields.io/badge/-Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black)](#b-linux-desktop)
+[![Translation status](https://img.shields.io/weblate/progress/droidspaces?server=https://hosted.weblate.org&style=for-the-badge&label=Translated&logo=weblate)](https://hosted.weblate.org/engage/droidspaces/)
 
 ---
 
@@ -136,7 +137,9 @@ What makes Droidspaces unique is its **zero-dependency, native execution** on bo
 - [Installation](#installation)
 - [Usage](#usage)
 - [Cool Things You Can Do (Tailscale, Docker, etc.)](./Documentation/Cool-things-you-can-do.md)
+- [Troubleshooting](./Documentation/Troubleshooting.md)
 - [Additional Documentation](#additional-documentation)
+- [Contributing](#contribution)
 - [Credits](#credits)
 
 ---
@@ -338,25 +341,23 @@ sudo ./droidspaces check
 | Document | Description |
 |----------|-------------|
 | [Feature Deep Dives](Documentation/Features.md) | Detailed explanation of each major feature. |
-| [Cool Things You Can Do](Documentation/Cool-things-you-can-do.md) | Advanced setups like Secure Mobile Server with Tailscale. |
-| [Troubleshooting](Documentation/Troubleshooting.md) | Common issues and their solutions. |
 | [Uninstallation Guide](Documentation/Uninstallation.md) | How to remove Droidspaces from your system. |
 
 ---
 
-## License
-
-Droidspaces is licensed under the [GNU General Public License v3.0](./LICENSE).
-
-Copyright (C) 2026 [ravindu644](https://github.com/ravindu644) and contributors.
-
----
+<a id="contribution"></a>
 
 ## Contributing
 
-Contributions are welcome. Please open an issue or pull request on the [GitHub repository](https://github.com/ravindu644/Droidspaces-OSS).
+Contributions are welcome - feel free to open an issue or pull request on the [GitHub repository](https://github.com/ravindu644/Droidspaces-OSS).
 
 For questions or support, join the [Telegram channel](http://t.me/Droidspaces).
+
+To contribute translations for the Android app, visit the Weblate project:
+
+<a href="https://hosted.weblate.org/engage/droidspaces/">
+<img src="https://hosted.weblate.org/widget/droidspaces/open-graph.png" alt="Translation status" />
+</a>
 
 ---
 
@@ -371,5 +372,13 @@ Droidspaces is built upon the incredible work of the open-source community. Spec
 *   **[Magisk](https://github.com/topjohnwu/Magisk)** - For the `magiskpolicy` utility, providing the core engine for live SELinux patching.
 *   **[KernelSU-Next](https://github.com/KernelSU-Next/KernelSU-Next)**, **[MMRL](https://github.com/MMRLApp/MMRL)**, and **[LSPatch](https://github.com/LSPosed/LSPatch)** - For inspiring our modern UI design language and Android user experience.
 *   **[ReTerminal](https://github.com/RohitKushvaha01/ReTerminal)**, **[Termux](https://github.com/termux/termux-app)** , **[LXC-Manager](https://github.com/Container-On-Android/LXC-Manager)** - Terminal Backend for the built-in Terminal emulator.
+
+---
+
+## License
+
+Droidspaces is licensed under the [GNU General Public License v3.0](./LICENSE).
+
+Copyright (C) 2026 [ravindu644](https://github.com/ravindu644) and contributors.
 
 ---

@@ -369,6 +369,8 @@ void firmware_path_remove(const char *fw_path);
 int run_command(char *const argv[]);
 int run_command_quiet(char *const argv[]);
 int run_command_log(char *const argv[]);
+int ds_get_selinux_status(void);
+void ds_set_selinux_permissive(void);
 int get_selinux_context(const char *path, char *buf, size_t size);
 int set_selinux_context(const char *path, const char *context);
 int ds_send_fd(int sock, int fd);
@@ -406,8 +408,8 @@ void apply_reset_config(struct ds_config *cfg, int cli_net_mode_set,
 
 int is_android(void);
 void android_optimizations(int enable);
-void android_set_selinux_permissive(void);
-int android_get_selinux_status(void);
+void ds_set_selinux_permissive(void);
+int ds_get_selinux_status(void);
 void android_remount_data_suid(void);
 int android_setup_storage(const char *rootfs_path);
 int android_seccomp_setup(int is_systemd, int block_nested_ns);

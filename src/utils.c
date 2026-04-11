@@ -1190,6 +1190,31 @@ int get_selinux_context(const char *path, char *buf, size_t size) {
   return 0;
 }
 
+int ds_get_selinux_status(void) {
+  char buf[16];
+  if (read_file("/sys/fs/selinux/enforce", buf, sizeof(buf)) < 0)
+    return -1;
+  return atoi(buf);
+}
+
+void ds_set_selinux_permissive(void) {
+  int status = ds_get_selinux_status();
+  if (status == -1) {
+    ds_warn("SELinux not supported or interface missing. Skipping permissive "
+            "mode.");
+    return;
+  }
+
+  if (status == 1) {
+    ds_log("Setting SELinux to permissive...");
+    if (write_file("/sys/fs/selinux/enforce", "0") < 0) {
+      /* Try setenforce command as fallback */
+      char *args[] = {"setenforce", "0", NULL};
+      run_command_quiet(args);
+    }
+  }
+}
+
 int set_selinux_context(const char *path, const char *context) {
   if (!path || !context)
     return -1;

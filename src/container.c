@@ -330,8 +330,12 @@ int start_rootfs(struct ds_config *cfg) {
   /* 1. Preparation */
   ensure_workspace();
 
-  if (cfg->selinux_permissive)
-    android_set_selinux_permissive();
+  /* If the user requested permissive mode, ensure it's applied.
+   * ds_set_selinux_permissive() is a no-op if host is already permissive. */
+  if (cfg->selinux_permissive) {
+    ds_set_selinux_permissive();
+  }
+
   if (cfg->android_storage && !is_android())
     ds_warn("--enable-android-storage is only supported on Android hosts. "
             "Skipping.");
@@ -1776,7 +1780,7 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
     /* SELinux */
     if (access("/sys/fs/selinux/enforce", R_OK) == 0) {
       const char *sel =
-          android_get_selinux_status() == 0 ? "Permissive" : "Enforcing";
+          ds_get_selinux_status() == 0 ? "Permissive" : "Enforcing";
       printf("  SELinux: %s\n", sel);
     }
 

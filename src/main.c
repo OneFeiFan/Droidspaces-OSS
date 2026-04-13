@@ -873,7 +873,7 @@ int main(int argc, char **argv) {
       cfg.gpu_mode = 1;
       break;
 
-    case 263:
+    case 264:
       cfg.allow_user_ns = 1;
       break;
 

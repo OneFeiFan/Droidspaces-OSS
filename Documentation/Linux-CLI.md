@@ -121,6 +121,7 @@ sudo droidspaces --name=web,db,app stop
 | `--termux-x11`| `-X` | Mount X11 socket for Termux-X11 display (Android only). |
 | `--enable-android-storage`| | Mount `/storage/emulated/0` (Android only). |
 | `--selinux-permissive` | | Set host SELinux to permissive for the container session. |
+| `--allow-user-ns` | | Enable `CLONE_NEWUSER` creation inside the container. Required for Flatpak/Bubblewrap. Note: Weakens security isolation. |
 
 ### Bind Mounts
 

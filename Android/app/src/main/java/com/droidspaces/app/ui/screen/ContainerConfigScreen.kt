@@ -45,6 +45,7 @@ fun ContainerConfigScreen(
     initialDisableIPv6: Boolean = false,
     initialEnableAndroidStorage: Boolean = false,
     initialEnableHwAccess: Boolean = false,
+    initialEnableGpuMode: Boolean = false,
     initialEnableTermuxX11: Boolean = false,
     initialSelinuxPermissive: Boolean = false,
     initialVolatileMode: Boolean = false,
@@ -62,6 +63,7 @@ fun ContainerConfigScreen(
         disableIPv6: Boolean,
         enableAndroidStorage: Boolean,
         enableHwAccess: Boolean,
+        enableGpuMode: Boolean,
         enableTermuxX11: Boolean,
         selinuxPermissive: Boolean,
         volatileMode: Boolean,
@@ -81,6 +83,7 @@ fun ContainerConfigScreen(
     var disableIPv6 by remember { mutableStateOf(initialDisableIPv6) }
     var enableAndroidStorage by remember { mutableStateOf(initialEnableAndroidStorage) }
     var enableHwAccess by remember { mutableStateOf(initialEnableHwAccess) }
+    var enableGpuMode by remember { mutableStateOf(initialEnableGpuMode) }
     var enableTermuxX11 by remember { mutableStateOf(initialEnableTermuxX11) }
     var selinuxPermissive by remember { mutableStateOf(initialSelinuxPermissive) }
     var volatileMode by remember { mutableStateOf(initialVolatileMode) }
@@ -183,7 +186,7 @@ fun ContainerConfigScreen(
             ) {
                 Button(
                     onClick = {
-                        onNext(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableTermuxX11, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, forceCgroupv1, blockNestedNs, if (envFileContent.isBlank()) null else envFileContent, allowUserNs ,upstreamInterfaces, portForwards)
+                        onNext(netMode, disableIPv6, enableAndroidStorage, enableHwAccess, enableGpuMode, enableTermuxX11, selinuxPermissive, volatileMode, bindMounts, dnsServers, runAtBoot, forceCgroupv1, blockNestedNs, if (envFileContent.isBlank()) null else envFileContent, allowUserNs, upstreamInterfaces, portForwards)
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -753,11 +756,12 @@ fun ContainerConfigScreen(
             )
 
             ToggleCard(
-                icon = Icons.Default.VerifiedUser,
-                title = context.getString(R.string.allow_user_ns),
-                description = context.getString(R.string.allow_user_ns_description),
-                checked = allowUserNs,
-                onCheckedChange = { allowUserNs = it }
+                icon = Icons.Default.Memory,
+                title = context.getString(R.string.gpu_access),
+                description = context.getString(R.string.gpu_access_description),
+                checked = if (enableHwAccess) true else enableGpuMode,
+                onCheckedChange = { if (!enableHwAccess) enableGpuMode = it },
+                enabled = !enableHwAccess
             )
 
             ToggleCard(
@@ -806,6 +810,14 @@ fun ContainerConfigScreen(
                 description = context.getString(R.string.manual_deadlock_shield_description),
                 checked = blockNestedNs,
                 onCheckedChange = { blockNestedNs = it }
+            )
+
+            ToggleCard(
+                icon = Icons.Default.VerifiedUser,
+                title = context.getString(R.string.allow_user_ns),
+                description = context.getString(R.string.allow_user_ns_description),
+                checked = allowUserNs,
+                onCheckedChange = { allowUserNs = it }
             )
 
             ToggleCard(

@@ -242,7 +242,7 @@ int internal_boot(struct ds_config *cfg) {
   }
 
   /* 8. Setup /dev (device nodes, devtmpfs) */
-  if (setup_dev(".", cfg->hw_access) < 0) {
+  if (setup_dev(".", cfg->hw_access, cfg->gpu_mode) < 0) {
     ds_error("Failed to setup /dev.");
     return -1;
   }
@@ -251,6 +251,8 @@ int internal_boot(struct ds_config *cfg) {
   if (!cfg->reboot_cycle) {
     if (cfg->hw_access)
       ds_log("Setting up hardware access...");
+    else if (cfg->gpu_mode)
+      ds_log("Setting up GPU-only access...");
     else
       ds_log("Hardware access disabled: using isolated tmpfs...");
   }
@@ -404,12 +406,27 @@ int internal_boot(struct ds_config *cfg) {
   /* 16. Custom bind mounts */
   setup_custom_binds(cfg, ".");
 
-  /* 17. pivot_root */
-  if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
+  /* 17. pivot_root with MS_MOVE+chroot fallback for ramfs/rootfs environments
+   * (e.g. Android recovery) where pivot_root(2) always returns EINVAL because
+   * the kernel refuses to pivot when new_root is on the same underlying fs as
+   * the current root (ramfs has no backing device, self-bind doesn't help).
+   * MS_MOVE atomically relocates the new root onto / and chroot(2) locks us
+   * in - exactly what switch_root(8) does internally. */
+  int used_ms_move = 0;
+  if (is_ramfs("/")) {
+    ds_log("Detected rootfs/ramfs root - automatically falling back to "
+           "MS_MOVE+chroot");
+    used_ms_move = 1;
+    if (mount(".", "/", NULL, MS_MOVE, NULL) < 0) {
+      ds_error("MS_MOVE fallback failed: %s", strerror(errno));
+      return -1;
+    }
+    if (chroot(".") < 0) {
+      ds_error("chroot(\".\") after MS_MOVE failed: %s", strerror(errno));
+      return -1;
+    }
+  } else if (syscall(SYS_pivot_root, ".", ".old_root") < 0) {
     ds_error("pivot_root failed: %s", strerror(errno));
-    /* pivot_root might fail if we are on ramfs.
-     * We don't die here because we might want to try fallback or
-     * at least log it properly. But in this implementation, it's critical. */
     return -1;
   }
 
@@ -444,11 +461,16 @@ int internal_boot(struct ds_config *cfg) {
   printf("\r\n");
   fflush(stdout);
 
-  /* 21. Cleanup .old_root */
-  if (umount2("/.old_root", MNT_DETACH) < 0)
-    ds_warn("Failed to unmount .old_root: %s", strerror(errno));
-  else
+  /* 21. Cleanup .old_root (skip when MS_MOVE fallback was used - there is no
+   * old root mountpoint to detach in that path). */
+  if (!used_ms_move) {
+    if (umount2("/.old_root", MNT_DETACH) < 0)
+      ds_warn("Failed to unmount .old_root: %s", strerror(errno));
+    else
+      rmdir("/.old_root");
+  } else {
     rmdir("/.old_root");
+  }
 
   /* 22. Set container identity for systemd/openrc */
   write_file(DS_SYSTEMD_CONTAINER_MARKER, "droidspaces");

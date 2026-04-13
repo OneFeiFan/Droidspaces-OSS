@@ -270,6 +270,7 @@ struct ds_config {
   /* Flags */
   int foreground;         /* --foreground */
   int hw_access;          /* --hw-access */
+  int gpu_mode;           /* --gpu: mirror GPU nodes into isolated tmpfs /dev */
   int termux_x11;         /* --termux-x11 (Android only) */
   int volatile_mode;      /* --volatile */
   int disable_ipv6;       /* --disable-ipv6 */
@@ -280,7 +281,7 @@ struct ds_config {
   int force_cgroupv1;     /* --force-cgroupv1: use v1 even if v2 is available */
   int block_nested_ns;    /* --block-nested-namespaces: fix VFS deadlock by
                               blocking nested namespace creation */
-  int allow_user_ns;      /* --allow-user-ns: allow CLONE_NEWUSER */                           
+  int allow_user_ns;      /* --allow-user-ns: allow CLONE_NEWUSER */
   char prog_name[64];     /* argv[0] for logging */
 
   /* Runtime state */
@@ -344,6 +345,7 @@ struct ds_config {
 void safe_strncpy(char *dst, const char *src, size_t size);
 char *ds_resolve_path_arg(const char *path);
 void ds_resolve_argv_paths(int argc, char **argv);
+int is_ramfs(const char *path);
 int is_subpath(const char *parent, const char *child);
 int is_running_in_termux(void);
 int write_file(const char *path, const char *content);
@@ -368,6 +370,8 @@ void firmware_path_remove(const char *fw_path);
 int run_command(char *const argv[]);
 int run_command_quiet(char *const argv[]);
 int run_command_log(char *const argv[]);
+int ds_get_selinux_status(void);
+void ds_set_selinux_permissive(void);
 int get_selinux_context(const char *path, char *buf, size_t size);
 int set_selinux_context(const char *path, const char *context);
 int ds_send_fd(int sock, int fd);
@@ -405,8 +409,8 @@ void apply_reset_config(struct ds_config *cfg, int cli_net_mode_set,
 
 int is_android(void);
 void android_optimizations(int enable);
-void android_set_selinux_permissive(void);
-int android_get_selinux_status(void);
+void ds_set_selinux_permissive(void);
+int ds_get_selinux_status(void);
 void android_remount_data_suid(void);
 int android_setup_storage(const char *rootfs_path);
 int android_seccomp_setup(int is_systemd, int block_nested_ns);
@@ -422,9 +426,10 @@ int domount_silent(const char *src, const char *tgt, const char *fstype,
                    unsigned long flags, const char *data);
 int bind_mount(const char *src, const char *tgt);
 int ds_apply_jail_mask(int hw_access, int allow_user_ns);
-int setup_dev(const char *rootfs, int hw_access);
+int setup_dev(const char *rootfs, int hw_access, int gpu_mode);
 int create_devices(const char *rootfs, int hw_access);
 int setup_devpts(int hw_access);
+int ds_fix_host_ptys(void);
 int setup_volatile_overlay(struct ds_config *cfg);
 int cleanup_volatile_overlay(struct ds_config *cfg);
 int check_volatile_mode(struct ds_config *cfg);
@@ -680,7 +685,7 @@ void print_documentation(const char *argv0);
 
 int is_dangerous_node(const char *name);
 int check_requirements(void);
-int check_requirements_hw(int hw_access, int force_cgroupv1);
+int check_requirements_hw(int hw_access);
 int check_requirements_detailed(void);
 
 /* ---------------------------------------------------------------------------

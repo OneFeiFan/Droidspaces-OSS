@@ -19,9 +19,9 @@
     <string name="kernel_requirements_copied">内核所需配置已复制到剪贴板</string>
     <string name="logs_copied">日志已复制到剪贴板</string>
     <string name="terminal">终端</string>
-    <string name="open">开启</string>
+    <string name="open">打开</string>
     <string name="loading">加载中...</string>
-    <string name="app_name">Droidspaces</string>
+    <string name="app_name" translatable="false">Droidspaces</string>
     <string name="check_root_access">检查Root权限</string>
     <string name="backend_not_installed">后端: 未安装</string>
     <string name="language">语言</string>
@@ -31,7 +31,7 @@
     <string name="restart_service">重启服务</string>
     <string name="about_section">关于</string>
     <string name="about_droidspaces">关于 Droidspaces</string>
-    <string name="developer_ravindu644">ravindu644</string>
+    <string name="developer_ravindu644" translatable="false">ravindu644</string>
     <string name="telegram_channel">Telegram 频道</string>
     <string name="github">GitHub</string>
     <string name="uninstall">卸载</string>
@@ -134,7 +134,7 @@
     <string name="copy">复制</string>
     <string name="unknown">未知</string>
     <string name="developer_ravindu644_role">后端、UI</string>
-    <string name="developer_thesithumsandaruwan">thesithumsandaruwan</string>
+    <string name="developer_thesithumsandaruwan" translatable="false">thesithumsandaruwan</string>
     <string name="developer_thesithumsandaruwan_role">UI</string>
     <string name="hostname_label">主机名：%1$s</string>
     <string name="start">启动</string>
@@ -199,7 +199,7 @@
     <string name="requirements_check_completed_successfully">成功完成运行要求检查</string>
     <string name="starting_migration">开始执行迁移操作...</string>
     <string name="grant_permission">授予权限</string>
-    <string name="container_name_placeholder">我的容器</string>
+    <string name="container_name_placeholder" translatable="false">my-container</string>
     <string name="reboot_recommended">建议在安装完成后重启以应用 SELinux 策略。</string>
     <string name="ram">RAM</string>
     <string name="user_in_parentheses">%1$s</string>
@@ -360,6 +360,12 @@
     <string name="detected_architecture">检测到架构：%1$s</string>
     <string name="octet_label">第%1$d字节</string>
     <string name="action_successful">%1$s %2$s 成功</string>
-    <string name="actioning_service">%1$sing %2$s...</string>
+    <string name="actioning_service" translatable="false">%1$sing %2$s...</string>
     <string name="error_unknown">错误：%1$s</string>
+    <string name="options">选项</string>
+    <string name="symlink_integration">将 Droidspaces 集成到系统路径中</string>
+    <string name="symlink_integration_description">在 /system/bin 创建一个符号链接以在 Android root 终端访问 Droidspaces 命令行。注意：开启这个选项会导致循环重启如果你的挂载系统使用的是OverlayFS类元模块。只有在使用基于Magic Mount的挂载系统才可使用该选项。（需要重启）</string>
+    <string name="gpu_option">GPU</string>
+    <string name="gpu_access">GPU 访问</string>
+    <string name="gpu_access_description">将GPU节点镜像到隔离的 /dev（没有完整的硬件透传）</string>
 </resources>

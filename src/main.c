@@ -22,88 +22,82 @@ void print_usage(void) {
   printf("by " C_CYAN "%s" C_RESET "\n", DS_AUTHOR);
   printf("\n" C_BLUE "%s" C_RESET "\n", DS_REPO);
   printf(C_DIM "Built on: %s %s" C_RESET "\n\n", __DATE__, __TIME__);
-  printf("Usage: droidspaces [options] <command> [args]\n\n" C_BOLD
-         "Commands:" C_RESET "\n");
-  printf("  start                     Start a new container\n");
-  printf("  stop                      Stop one or more containers\n");
-  printf("  restart                   Restart a container\n");
-  printf("  enter [user]              Enter a running container\n");
-  printf("  run <cmd> [args]          Run a command in a running container\n");
-  printf("  status                    Show container status\n");
-  printf("  uptime                    Show how long the container has been "
-         "running\n");
-  printf("  info                      Show detailed container info\n");
-  printf("  show                      List all running containers\n");
-  printf("  scan                      Scan for untracked containers\n");
-  printf("  check                     Check system requirements\n");
-  printf("  docs                      Show interactive documentation\n");
-  printf("  help                      Show this help message\n");
-  printf("  version                   Show version information\n");
+  printf(
+      "Usage: droidspaces [options] <command> [args]\n\n" C_BOLD
+      "Commands:" C_RESET "\n"
+      "  start                     Start a new container\n"
+      "  stop                      Stop one or more containers\n"
+      "  restart                   Restart a container\n"
+      "  enter [user]              Enter a running container\n"
+      "  run <cmd> [args]          Run a command in a running container\n"
+      "  status                    Show container status\n"
+      "  uptime                    Show how long the container has been "
+      "running\n"
+      "  info                      Show detailed container info\n"
+      "  pid                       Show the live PID of the container init\n"
+      "  show                      List all running containers\n"
+      "  scan                      Scan for untracked containers\n"
+      "  check                     Check system requirements\n"
+      "  docs                      Show interactive documentation\n"
+      "  help                      Show this help message\n"
+      "  version                   Show version information\n\n"
 
-  printf(C_BOLD "\nOptions:" C_RESET "\n");
-  printf("  -r, --rootfs=PATH         Path to rootfs directory\n");
-  printf("  -i, --rootfs-img=PATH     Path to rootfs image (.img)\n");
-  printf("  -n, --name=NAME           Container name (auto-generated if "
-         "omitted)\n");
-  printf("  -h, --hostname=NAME       Set container hostname\n");
-  printf(
-      "  -d, --dns=SERVERS         Set custom DNS servers (comma separated)\n");
-  printf("  -f, --foreground          Run in foreground (attach console)\n");
-  printf("  -V, --volatile            Discard changes on exit (OverlayFS)\n");
-  printf("  -E, --env=PATH            Load environment variables from file\n");
-  printf(
-      "  -X, --termux-x11          Enable Termux-X11 support (Android only)\n");
-  printf("      --disable-ipv6        Disable IPv6 inside the container.\n"
-         "                            In host mode, this also disables IPv6\n"
-         "                            on the host network - VPN apps may break "
-         "in Android.\n"
-         "                            In NAT/none mode, IPv6 is always off.\n");
-  printf("      --net=MODE            Networking mode: host (default), nat, "
-         "none\n");
-  printf("      --upstream IFACE[,..] Upstream internet interface(s) for nat "
-         "mode\n"
-         "                            REQUIRED with --net=nat. Comma-separated "
-         "list\n"
-         "                            in priority order. Monitor tracks "
-         "whichever\n"
-         "                            is currently active (RUNNING + has a "
-         "route).\n"
-         "                            e.g. --upstream wlan0\n"
-         "                            e.g. --upstream wlan0,rmnet0,ccmni1\n");
-  printf(
-      "      --port HOST:CONT[/proto] Forward host port to container (nat "
+      C_BOLD "Options (Container Setup):" C_RESET "\n"
+      "  -r, --rootfs=PATH         Path to rootfs directory\n"
+      "  -i, --rootfs-img=PATH     Path to rootfs image (.img)\n"
+      "  -n, --name=NAME           Container name (auto-generated if omitted)\n"
+      "  -h, --hostname=NAME       Set container hostname\n"
+      "  -C, --conf=PATH           Load configuration from file\n\n"
+
+      C_BOLD "Options (Networking):" C_RESET "\n"
+      "      --net=MODE            Modes: host (default), nat, none\n"
+      "      --nat-ip=IP           Assign a fixed IP in 172.28.*.* range (nat "
       "mode)\n"
-      "                            e.g. --port 22:22 --port 8096:8096/tcp\n");
-  printf(
-      "      --nat-ip=IP           Assign a fixed IP to the container inside\n"
-      "                            the NAT subnet (" DS_DEFAULT_SUBNET ").\n"
-      "                            Auto-assigned and persisted on first boot\n"
-      "                            if omitted. Stable across reboots.\n"
-      "                            e.g. --nat-ip 172.28.5.10\n");
-  printf(
-      "  -B, --bind-mount, --bind=SRC:DEST\n"
-      "                            Bind mount host directory into container\n");
-  printf("  -C, --conf=PATH           Load configuration from file\n");
-  printf("      --reset               Reset config to defaults (keeps "
-         "name/rootfs)\n");
-  printf(
-      "      --force-cgroupv1      Force legacy cgroup v1 hierarchy even if\n"
-      "                            v2 is available on the host. Useful if\n"
-      "                            modern cgroup v2 setup leads to stability\n"
-      "                            issues on legacy Android kernels.\n");
-  printf(
-      "      --block-nested-namespaces\n"
-      "                            Block nested namespace creation inside the\n"
-      "                            container (unshare/clone) to fix VFS\n"
-      "                            deadlocks on kernels like 4.14.x stock.\n");
-  printf("      --allow-user-ns       Allow user namespace creation (unshare/clone)\n"
-       "                            Useful for Flatpak/Bubblewrap. Reduces security.\n");
-  printf("  --help                    Show this help message\n\n");
+      "      --upstream IFACE      Upstream interface(s) (supports wildcards, "
+      "e.g. rmnet*)\n"
+      "                            e.g. --upstream wlan0 or --upstream "
+      "wlan0,rmnet*\n"
+      "      --port [H:]C[/P]      Forward ports (supports ranges and "
+      "symmetric ports)\n"
+      "                            e.g. --port 22, 80:80/tcp, "
+      "1000-2000:1000-2000/udp\n"
+      "  -d, --dns=SERVERS         Set custom DNS servers (comma separated)\n"
+      "                            e.g. --dns 1.1.1.1,8.8.8.8\n"
+      "  -I, --disable-ipv6        Disable IPv6 inside the container\n\n"
 
-  printf(C_BOLD "Examples:" C_RESET "\n");
-  printf("  droidspaces --rootfs=/path/to/rootfs start\n");
-  printf("  droidspaces --name=mycontainer enter\n");
-  printf("  droidspaces --name=mycontainer stop\n\n");
+      C_BOLD "Options (Integration & Hardware):" C_RESET "\n"
+      "  -S, --enable-android-storage\n"
+      "                            Mount Android internal storage (/sdcard)\n"
+      "  -H, --hw-access           Enable direct hardware access (/dev nodes)\n"
+      "      --gpu                 Enable GPU acceleration nodes\n"
+      "  -X, --termux-x11          Configure Termux-X11 display support\n\n"
+
+      C_BOLD "Options (Security & Boot):" C_RESET "\n"
+      "  -P, --selinux-permissive  Set host SELinux to permissive mode\n"
+      "  -V, --volatile            Discard changes on exit (OverlayFS)\n"
+      "      --force-cgroupv1      Force legacy cgroup v1 hierarchy\n"
+      "      --block-nested-namespaces\n"
+      "                            Manual Deadlock Shield (no nested "
+      "namespaces)\n\n"
+      "      --allow-user-ns       Allow user namespace creation (unshare/clone)\n"
+      "                            Useful for Flatpak/Bubblewrap. Reduces security.\n"
+
+      C_BOLD "Options (Advanced):" C_RESET "\n"
+      "  -f, --foreground          Run in foreground (attach console)\n"
+      "  -E, --env=PATH            Load environment variables from file\n"
+      "  -B, --bind=SRC:DEST       Bind mount host directory into container\n"
+      "                            Supports multiple flags or "
+      "comma-separation\n"
+      "                            e.g. -B /data:/data -B /tmp:/tmp\n"
+      "                            e.g. -B /data:/data,/tmp:/tmp\n"
+      "      --reset               Reset config to defaults (keeps "
+      "name/rootfs)\n"
+      "      --help                Show this help message\n\n"
+
+      C_BOLD "Examples:" C_RESET "\n"
+      "  droidspaces --rootfs=/path/to/rootfs start\n"
+      "  droidspaces --name=mycontainer enter\n"
+      "  droidspaces --name=mycontainer stop\n\n");
 }
 
 /* ---------------------------------------------------------------------------
@@ -348,7 +342,8 @@ int main(int argc, char **argv) {
       {"force-cgroupv1", no_argument, 0, 260},
       {"block-nested-namespaces", no_argument, 0, 261},
       {"nat-ip", required_argument, 0, 262},
-      {"allow-user-ns", no_argument, 0, 263},
+      {"gpu", no_argument, 0, 263},
+      {"allow-user-ns", no_argument, 0, 264},
       {"reset", no_argument, 0, 256},
       {"help", no_argument, 0, 'v'},
       {0, 0, 0, 0}};
@@ -871,6 +866,14 @@ int main(int argc, char **argv) {
     }
 
     case 263:
+      /* --gpu: enable GPU acceleration in isolated tmpfs mode.
+       * Scans the host /dev for known GPU nodes and mknods them into the
+       * container's isolated /dev.  Safe to combine with --hw-access (which
+       * already does full GPU wiring). */
+      cfg.gpu_mode = 1;
+      break;
+
+    case 263:
       cfg.allow_user_ns = 1;
       break;
 
@@ -982,7 +985,7 @@ int main(int argc, char **argv) {
       ret = 1;
       goto cleanup;
     }
-    if (check_requirements_hw(cfg.hw_access, cfg.force_cgroupv1) < 0) {
+    if (check_requirements_hw(cfg.hw_access) < 0) {
       ret = 1;
       goto cleanup;
     }
@@ -1005,7 +1008,7 @@ int main(int argc, char **argv) {
   }
 
   if (strcmp(cmd, "restart") == 0) {
-    if (check_requirements_hw(cfg.hw_access, cfg.force_cgroupv1) < 0) {
+    if (check_requirements_hw(cfg.hw_access) < 0) {
       ret = 1;
       goto cleanup;
     }

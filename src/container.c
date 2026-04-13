@@ -330,8 +330,12 @@ int start_rootfs(struct ds_config *cfg) {
   /* 1. Preparation */
   ensure_workspace();
 
-  if (cfg->selinux_permissive)
-    android_set_selinux_permissive();
+  /* If the user requested permissive mode, ensure it's applied.
+   * ds_set_selinux_permissive() is a no-op if host is already permissive. */
+  if (cfg->selinux_permissive) {
+    ds_set_selinux_permissive();
+  }
+
   if (cfg->android_storage && !is_android())
     ds_warn("--enable-android-storage is only supported on Android hosts. "
             "Skipping.");
@@ -486,6 +490,8 @@ int start_rootfs(struct ds_config *cfg) {
   }
 
   cfg->tty_count = DS_MAX_TTYS;
+  ds_fix_host_ptys();
+
   if (ds_terminal_create(&cfg->console) < 0) {
     ds_error("Failed to allocate console PTY");
     goto cleanup;
@@ -719,19 +725,6 @@ int start_rootfs(struct ds_config *cfg) {
         _exit(EXIT_FAILURE);
       }
 
-      /* Intermediate: redirect stdio to /dev/null immediately.
-       * It only exists to wait for init and has no business talking to the
-       * user's terminal or holding pipes open. */
-      if (!cfg->foreground) {
-        int devnull = open("/dev/null", O_RDWR);
-        if (devnull >= 0) {
-          dup2(devnull, 0);
-          dup2(devnull, 1);
-          dup2(devnull, 2);
-          close(devnull);
-        }
-      }
-
       pid_t init_pid = fork();
       if (init_pid < 0)
         _exit(EXIT_FAILURE);
@@ -747,6 +740,28 @@ int start_rootfs(struct ds_config *cfg) {
         }
         close(sync_pipe[1]);
         _exit(internal_boot(cfg));
+      }
+
+      /* Intermediate: redirect stdio to /dev/null NOW (after forking init).
+       * It only exists to wait for init and has no business talking to the
+       * user's terminal or holding pipes open.
+       *
+       * BUG FIX: this redirect was previously placed BEFORE the fork(), which
+       * caused init_pid to inherit /dev/null for fd 1 and fd 2. Every
+       * ds_log() call inside internal_boot() writes to stdout, so all boot
+       * logs were silently swallowed by /dev/null - visible only in the log
+       * file (which uses direct file I/O, not stdout). Moving the redirect
+       * here means only the intermediate itself goes silent; internal_boot()
+       * retains the original terminal fds until it redirects to /dev/console
+       * at its own step 24. */
+      if (!cfg->foreground) {
+        int devnull = open("/dev/null", O_RDWR);
+        if (devnull >= 0) {
+          dup2(devnull, 0);
+          dup2(devnull, 1);
+          dup2(devnull, 2);
+          close(devnull);
+        }
       }
 
       /* Send init PID to monitor so it can target /proc/<pid>/ns/net */
@@ -1054,8 +1069,9 @@ int start_rootfs(struct ds_config *cfg) {
          monitor_pid);
 
   /* 9. Android: Remount /data with suid for directory-based containers.
-   * This is required for sudo/su to work if the rootfs is on /data. */
-  if (is_android() && !cfg->rootfs_img_path[0])
+   * This is required for sudo/su to work if the rootfs is on /data.
+   * Skip on ramfs (recovery) as it's unnecessary and likely to fail. */
+  if (is_android() && !cfg->rootfs_img_path[0] && !is_ramfs("/"))
     android_remount_data_suid();
 
   /* Log volatile mode */
@@ -1701,7 +1717,7 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
   /* Host info */
   const char *host = is_android() ? "Android" : "Linux";
   const char *arch = get_architecture();
-  printf("\n" C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
+  printf(C_GREEN "Host:" C_RESET " %s %s\n", host, arch);
 
   /* Case 1: No container name specified */
   if (cfg->container_name[0] == '\0') {
@@ -1764,7 +1780,7 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
     /* SELinux */
     if (access("/sys/fs/selinux/enforce", R_OK) == 0) {
       const char *sel =
-          android_get_selinux_status() == 0 ? "Permissive" : "Enforcing";
+          ds_get_selinux_status() == 0 ? "Permissive" : "Enforcing";
       printf("  SELinux: %s\n", sel);
     }
 
@@ -1790,9 +1806,11 @@ int show_info(struct ds_config *cfg, int trust_cfg_pid) {
     /* HW access */
     int hw = detect_hw_access_in_container(pid);
     if (hw)
-      printf("  " C_RED "HW access:" C_RESET " enabled\n");
+      printf("  " C_RED "HW access: full" C_RESET "\n");
+    else if (cfg->gpu_mode)
+      printf("  HW access: GPU\n");
     else
-      printf("  HW access: disabled\n");
+      printf("  HW access: " C_DIM "none" C_RESET "\n");
   } else {
     /* Best effort: read os-release from rootfs path */
     if (cfg->rootfs_path[0]) {
